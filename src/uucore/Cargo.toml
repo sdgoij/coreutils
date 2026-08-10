@@ -32,7 +32,6 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
-libc = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
 # Not optional: os_display already pulls unicode-width into every uucore build,
@@ -83,6 +82,21 @@ fluent = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
+
+# uucore's minix platform code talks to the OS directly (features/minix.rs);
+# the crates.io unix machinery (rustix, libc, errno) has no minix branch and
+# would fail to build, so keep it out of the tree for minix only.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true, optional = true }
+rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
+
+# uucore's minix platform code talks to the OS directly (features/minix.rs);
+# the crates.io unix machinery (rustix, libc, errno) has no minix branch and
+# would fail to build, so keep it out of the tree for minix only. rustix needs
+# no gate of its own: it is declared under `cfg(any(unix, windows, wasi))`
+# below, and minix is none of those.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -97,13 +97,13 @@ impl OwnedFileDescriptorOrHandle {
     }
 
     /// instantiates a corresponding `Stdio`
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(self.fx)
     }
 
-    /// WASI: Stdio::from(OwnedFd) is not available, convert via File instead.
-    #[cfg(target_os = "wasi")]
+    /// WASI/minix: Stdio::from(OwnedFd) is not available, convert via File instead.
+    #[cfg(any(target_os = "wasi", target_os = "minix"))]
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(File::from(self.fx))
     }

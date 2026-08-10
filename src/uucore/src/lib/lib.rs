@@ -10,7 +10,7 @@
 // #![deny(missing_docs)] //TODO: enable this
 
 // * feature-gated external crates (re-shared as public internal modules)
-#[cfg(feature = "libc")]
+#[cfg(all(feature = "libc", not(target_os = "minix")))]
 pub extern crate libc;
 #[cfg(all(feature = "windows-sys", windows))]
 pub extern crate windows_sys;

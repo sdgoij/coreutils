@@ -18,7 +18,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(any(unix, target_os = "wasi", target_os = "minix"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -26,19 +26,19 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
-use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
+use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(unix)]
 use std::sync::OnceLock;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW,
+    GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW, BY_HANDLE_FILE_INFORMATION,
 };
 #[cfg(windows)]
-use windows_sys::Win32::System::IO::DeviceIoControl;
-#[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+#[cfg(windows)]
+use windows_sys::Win32::System::IO::DeviceIoControl;
 
 /// Used to check if the `mode` has its `perm` bit set.
 ///
@@ -56,6 +56,7 @@ macro_rules! has {
 pub struct FileInformation(
     #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
     #[cfg(windows)] BY_HANDLE_FILE_INFORMATION,
+    #[cfg(target_os = "minix")] fs::Metadata,
 );
 
 impl FileInformation {
@@ -75,6 +76,13 @@ impl FileInformation {
             return Err(Error::last_os_error());
         }
         Ok(Self(info))
+    }
+
+    /// Get information from a currently open file
+    #[cfg(target_os = "minix")]
+    pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
+        let f = fs::File::from(file.as_fd().try_clone_to_owned()?);
+        Ok(Self(f.metadata()?))
     }
 
     /// Get information for a given path.
@@ -106,6 +114,15 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
+        #[cfg(target_os = "minix")]
+        {
+            let stat = if dereference {
+                fs::metadata(path.as_ref())
+            } else {
+                fs::symlink_metadata(path.as_ref())
+            };
+            Ok(Self(stat?))
+        }
     }
 
     pub fn file_size(&self) -> u64 {
@@ -117,6 +134,10 @@ impl FileInformation {
         #[cfg(windows)]
         {
             ((self.0.nFileSizeHigh as u64) << 32) | (self.0.nFileSizeLow as u64)
+        }
+        #[cfg(target_os = "minix")]
+        {
+            self.0.len()
         }
     }
 
@@ -136,6 +157,10 @@ impl FileInformation {
         }
         #[cfg(windows)]
         return self.0.nNumberOfLinks as u64;
+        #[cfg(target_os = "minix")]
+        // std does not expose st_nlink for minix; a path-resolved file has
+        // at least one link.
+        return 1;
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
@@ -145,6 +170,13 @@ impl FileInformation {
         #[cfg(not(target_os = "haiku"))]
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
+    }
+
+    #[cfg(target_os = "minix")]
+    pub fn inode(&self) -> u64 {
+        // std does not expose st_ino for minix; consumers treat 0 as "no
+        // inode".
+        0
     }
 }
 
@@ -163,6 +195,15 @@ impl PartialEq for FileInformation {
     }
 }
 
+// Minix: std exposes neither st_dev nor st_ino; compare size + mtime as a
+// best-effort same-file check until a raw fstat is available.
+#[cfg(target_os = "minix")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.len() == other.0.len() && self.0.modified().ok() == other.0.modified().ok()
+    }
+}
+
 impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
@@ -176,6 +217,10 @@ impl Hash for FileInformation {
         {
             self.0.dwVolumeSerialNumber.hash(state);
             self.file_index().hash(state);
+        }
+        #[cfg(target_os = "minix")]
+        {
+            self.0.len().hash(state);
         }
     }
 }
@@ -542,7 +587,11 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     result.push(if mode & S_IRUSR != 0 { 'r' } else { '-' });
     result.push(if mode & S_IWUSR != 0 { 'w' } else { '-' });
     result.push(if mode & S_ISUID != 0 {
-        if mode & S_IXUSR != 0 { 's' } else { 'S' }
+        if mode & S_IXUSR != 0 {
+            's'
+        } else {
+            'S'
+        }
     } else if mode & S_IXUSR != 0 {
         'x'
     } else {
@@ -552,7 +601,11 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     result.push(if mode & S_IRGRP != 0 { 'r' } else { '-' });
     result.push(if mode & S_IWGRP != 0 { 'w' } else { '-' });
     result.push(if mode & S_ISGID != 0 {
-        if mode & S_IXGRP != 0 { 's' } else { 'S' }
+        if mode & S_IXGRP != 0 {
+            's'
+        } else {
+            'S'
+        }
     } else if mode & S_IXGRP != 0 {
         'x'
     } else {
@@ -562,7 +615,11 @@ pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     result.push(if mode & S_IROTH != 0 { 'r' } else { '-' });
     result.push(if mode & S_IWOTH != 0 { 'w' } else { '-' });
     result.push(if mode & S_ISVTX != 0 {
-        if mode & S_IXOTH != 0 { 't' } else { 'T' }
+        if mode & S_IXOTH != 0 {
+            't'
+        } else {
+            'T'
+        }
     } else if mode & S_IXOTH != 0 {
         'x'
     } else {
@@ -656,7 +713,7 @@ pub fn path_is_root_dir<P: AsRef<Path>>(path: P, dereference: bool) -> bool {
 /// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
 /// ```
 pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
-    use std::fs::{File, metadata};
+    use std::fs::{metadata, File};
     use std::io::{BufReader, ErrorKind, Read};
 
     let path1 = path1.as_ref();
@@ -911,6 +968,15 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
         let _ = stdin;
         false
     }
+
+    #[cfg(target_os = "minix")]
+    {
+        if let Ok(fd) = stdin.as_fd().try_clone_to_owned() {
+            let f = fs::File::from(fd);
+            return f.metadata().map(|m| m.is_dir()).unwrap_or(false);
+        }
+        false
+    }
 }
 
 pub mod sane_blksize {
@@ -1104,7 +1170,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(all(unix, not(target_os = "redox")))]
     {
-        use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, unlinkat};
+        use rustix::fs::{openat, renameat, unlinkat, AtFlags, Mode, OFlags, CWD};
         use std::ffi::OsStr;
         use std::io::Read;
         use std::os::unix::ffi::OsStrExt;
@@ -1178,7 +1244,7 @@ pub fn replace_link(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> 
 /// `symlinkat`/`linkat` relative to an open directory.
 #[cfg(all(unix, not(target_os = "redox")))]
 fn link_at<Fd: AsFd>(target: &Path, dir: Fd, name: &OsStr, symbolic: bool) -> IOResult<()> {
-    use rustix::fs::{AtFlags, CWD, linkat, symlinkat};
+    use rustix::fs::{linkat, symlinkat, AtFlags, CWD};
 
     if symbolic {
         symlinkat(target, dir, name).map_err(Into::into)
@@ -1216,7 +1282,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::{tempdir, NamedTempFile};
 
     struct NormalizePathTestCase<'a> {
         path: &'a str,

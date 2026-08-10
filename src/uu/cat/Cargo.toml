@@ -22,6 +22,10 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fast-inc", "fs", "pipes", "signals"] }
 fluent = { workspace = true }
 
+# rustix has no minix backend; cat's minix paths use uucore's minix platform.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 [dev-dependencies]
 divan = { workspace = true }
 tempfile = { workspace = true }

@@ -9,6 +9,9 @@ pub use self::unix::is_safe_overwrite;
 #[cfg(windows)]
 pub use self::windows::is_safe_overwrite;
 
+#[cfg(target_os = "minix")]
+pub use self::minix::is_safe_overwrite;
+
 // WASI: when stdout is inherited from a host file descriptor, wasmtime
 // reports its fstat as all-zero (st_dev == st_ino == 0), so the dev/inode
 // comparison against any input file descriptor can never match. There is
@@ -24,3 +27,6 @@ mod unix;
 
 #[cfg(windows)]
 mod windows;
+
+#[cfg(target_os = "minix")]
+mod minix;
