@@ -18,7 +18,7 @@ use parser::{Operator, Symbol, UnaryOperator, parse};
 use platform::fd_is_terminal;
 #[cfg(target_os = "wasi")]
 use platform::path;
-#[cfg(not(any(windows, target_os = "wasi")))]
+#[cfg(all(not(any(windows, target_os = "wasi")), not(target_os = "minix")))]
 use rustix::process::{getegid, geteuid};
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
@@ -324,8 +324,10 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     Ok(result)
 }
 
+#[cfg_attr(target_os = "minix", allow(unused_variables))] // parsed is only validated on minix
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
-    fd.to_str()
+    let parsed = fd
+        .to_str()
         .map(str::trim)
         .and_then(|s| s.parse::<i32>().ok())
         .ok_or_else(|| {
@@ -337,10 +339,17 @@ fn isatty(fd: &OsStr) -> ParseResult<bool> {
         .map(fd_is_terminal)
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "minix")))]
 fn fd_is_terminal(fd: i32) -> bool {
     // SAFETY: isatty only inspects the descriptor number it is given.
     unsafe { libc::isatty(fd) == 1 }
+}
+
+// minix std has no isatty, and the kernel exposes no tty check yet.
+#[cfg(target_os = "minix")]
+fn fd_is_terminal(_fd: i32) -> bool {
+    false
+}
 }
 
 #[derive(Eq, PartialEq)]
@@ -375,7 +384,7 @@ pub(crate) fn modified_since_read(metadata: &fs::Metadata) -> bool {
     )
 }
 
-#[cfg(not(any(windows, target_os = "wasi")))]
+#[cfg(all(not(any(windows, target_os = "wasi")), not(target_os = "minix")))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::Metadata;
     use std::os::unix::fs::FileTypeExt;
@@ -431,6 +440,30 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::UserIdFlag => metadata.mode() & S_ISUID != 0,
         PathCondition::Writable => perm(metadata, Permission::Write),
         PathCondition::Executable => perm(metadata, Permission::Execute),
+    }
+}
+
+// minix std exposes no uid/gid/mode bits (no std::os::unix), so ownership,
+// permission-bit and device-type checks cannot be answered; the conditions
+// that std metadata can resolve are supported and the rest report false.
+#[cfg(target_os = "minix")]
+fn path(path: &OsStr, condition: &PathCondition) -> bool {
+    use std::fs::metadata;
+
+    let Ok(metadata) = metadata(path) else {
+        return false;
+    };
+
+    let file_type = metadata.file_type();
+    match condition {
+        PathCondition::Directory => file_type.is_dir(),
+        PathCondition::Exists | PathCondition::Readable => true,
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
+        PathCondition::Regular => file_type.is_file(),
+        PathCondition::NonEmpty => metadata.len() > 0,
+        PathCondition::Writable => !metadata.permissions().readonly(),
+        PathCondition::SymLink => file_type.is_symlink(),
+        _ => false,
     }
 }
 

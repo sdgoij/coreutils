@@ -25,6 +25,9 @@ pub trait WordCountable: AsFd + AsRawFd + Read {
 pub trait WordCountable: Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
+    // The impls are shared with unix (cfg(not(wasi))), where the fast-count
+    // path uses inner_file; on minix no caller exists yet.
+    #[allow(dead_code)]
     fn inner_file(&mut self) -> Option<&mut File>;
 }
 

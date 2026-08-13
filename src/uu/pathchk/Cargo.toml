@@ -18,9 +18,13 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-libc = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+
+# libc has no minix backend; pathchk's minix path uses the cfg(not(unix))
+# PATH_MAX/FILENAME_MAX fallbacks.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true }
 
 [lints]
 workspace = true

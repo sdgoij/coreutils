@@ -88,6 +88,16 @@ mod platform {
     }
 }
 
+#[cfg(target_os = "minix")]
+mod platform {
+    use uucore::error::UResult;
+
+    pub fn do_sync() -> UResult<()> {
+        // minix has no fsync/sync syscall; the kernel flushes synchronously.
+        Ok(())
+    }
+}
+
 #[cfg(windows)]
 mod platform {
     use std::fs::OpenOptions;

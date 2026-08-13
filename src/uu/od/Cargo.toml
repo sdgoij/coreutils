@@ -19,7 +19,10 @@ clap = { workspace = true }
 half = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
 fluent = { workspace = true }
-libc.workspace = true
+
+# libc has no minix backend; od's non-minix paths use it, minix's use std only.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true }
 
 [target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
 rustix = { workspace = true, features = ["stdio"] }

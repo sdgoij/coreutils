@@ -5,20 +5,21 @@
 
 #[cfg(unix)]
 pub use self::unix::{
-    Pid,
-    ProcessChecker,
     //stdin_is_bad_fd, stdin_is_pipe_or_fifo, supports_pid_checks, Pid, ProcessChecker,
     supports_pid_checks,
+    Pid,
+    ProcessChecker,
 };
 
 #[cfg(windows)]
-pub use self::windows::{Pid, ProcessChecker, supports_pid_checks};
+pub use self::windows::{supports_pid_checks, Pid, ProcessChecker};
 
-// WASI has no process management; provide stubs so tail compiles.
-#[cfg(target_os = "wasi")]
+// WASI and minix have no process-management APIs exposed yet; provide stubs
+// so tail compiles.
+#[cfg(any(target_os = "wasi", target_os = "minix"))]
 pub type Pid = u64;
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "minix"))]
 pub fn supports_pid_checks(_pid: Pid) -> bool {
     false
 }

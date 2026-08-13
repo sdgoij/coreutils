@@ -19,8 +19,12 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
-libc = { workspace = true }
 fluent = { workspace = true }
+
+# libc has no minix backend; rmdir defines the errno constants it needs
+# locally for minix.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true }
 
 [lints]
 workspace = true

@@ -12,7 +12,7 @@ use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{UResult, set_exit_code, strip_errno};
+use uucore::error::{set_exit_code, strip_errno, UResult};
 use uucore::translate;
 
 use uucore::{format_usage, show_error};
@@ -130,8 +130,11 @@ fn strip_trailing_slashes_from_path(path: &[u8]) -> &[u8] {
 }
 
 // POSIX: https://pubs.opengroup.org/onlinepubs/009696799/functions/rmdir.html
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "minix")))]
 const NOT_EMPTY_CODES: &[i32] = &[libc::ENOTEMPTY, libc::EEXIST];
+// minix std maps errnos to POSIX values (ENOTEMPTY=39, EEXIST=17).
+#[cfg(all(not(windows), target_os = "minix"))]
+const NOT_EMPTY_CODES: &[i32] = &[39, 17];
 
 // 145 is ERROR_DIR_NOT_EMPTY, determined experimentally.
 #[cfg(windows)]
@@ -141,8 +144,11 @@ const NOT_EMPTY_CODES: &[i32] = &[145];
 // not empty.
 // This is a subset of the error codes listed in rmdir(2) from the Linux man-pages
 // project. Maybe other systems have additional codes that apply?
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "minix")))]
 const PERHAPS_EMPTY_CODES: &[i32] = &[libc::EACCES, libc::EBUSY, libc::EPERM, libc::EROFS];
+// minix std maps errnos to POSIX values (EACCES=13, EBUSY=16, EPERM=1, EROFS=30).
+#[cfg(all(not(windows), target_os = "minix"))]
+const PERHAPS_EMPTY_CODES: &[i32] = &[13, 16, 1, 30];
 
 // Probably incomplete, I can't find a list of possible errors for
 // RemoveDirectory anywhere.

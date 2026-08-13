@@ -12,7 +12,7 @@ use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(any(target_os = "wasi", target_os = "minix")))]
 use uucore::error::UResult;
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
@@ -162,9 +162,9 @@ impl FileExtTail for File {
 
 pub trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool>;
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -182,12 +182,12 @@ impl MetadataExtTail for Metadata {
     }
 
     /// Return true if the file was modified and is now shorter
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     fn got_truncated(&self, other: &Metadata) -> UResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
     }
 
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
@@ -206,17 +206,23 @@ impl MetadataExtTail for Metadata {
             // }
             false
         }
+        // Other targets (minix): std exposes no device/inode identity, so be
+        // conservative and report different files.
+        #[cfg(all(not(unix), not(windows)))]
+        {
+            false
+        }
     }
 }
 
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(any(target_os = "wasi", target_os = "minix")))]
 pub trait PathExtTail {
     fn is_stdin(&self) -> bool;
     fn has_active_parent(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
 
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(any(target_os = "wasi", target_os = "minix")))]
 impl PathExtTail for Path {
     fn is_stdin(&self) -> bool {
         self.eq(Self::new(text::DASH))

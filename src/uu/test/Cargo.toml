@@ -21,10 +21,11 @@ fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "wide"] }
 
-[target.'cfg(not(any(windows, target_os = "wasi")))'.dependencies]
+# rustix and libc have no minix backend; test's minix paths use std only.
+[target.'cfg(all(not(any(windows, target_os = "wasi")), not(target_os = "minix")))'.dependencies]
 rustix = { workspace = true, features = ["process"] }
 
-[target.'cfg(not(windows))'.dependencies]
+[target.'cfg(all(not(windows), not(target_os = "minix")))'.dependencies]
 libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]

@@ -21,6 +21,10 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser", "signals"] }
 fluent = { workspace = true }
 
+# rustix has no minix backend; tee's non-unix fallbacks use std stdio instead.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+rustix = { workspace = true, features = ["stdio", "fs"] }
+
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }

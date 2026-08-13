@@ -9,12 +9,16 @@ use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+#[cfg(not(target_os = "minix"))]
 use uucore::libc::EINVAL;
+#[cfg(target_os = "minix")]
+// minix std maps errnos to POSIX values; EINVAL is 22 there.
+const EINVAL: i32 = 22;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 use uucore::{format_usage, show_error};

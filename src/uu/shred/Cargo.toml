@@ -19,8 +19,10 @@ doctest = false
 clap = { workspace = true }
 rand = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
-libc = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true }
 
 [lints]
 workspace = true

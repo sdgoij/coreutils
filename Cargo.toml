@@ -292,7 +292,95 @@ feat_os_unix_redox = [
   "chmod",
   "stat",
 ]
-##
+# "feat_minix" == set of utilities which build/run on the minixrs OS.
+#
+# minix is not cfg(unix), so tools whose platform deps are gated behind
+# cfg(unix) build as-is; tools with unconditional rustix/libc deps have them
+# gated with cfg(not(target_os = "minix")) in their own Cargo.toml (see cat
+# for the pattern). Some tools carry small minix fallbacks in their code
+# (e.g. tail's pid-check stubs, test's isatty) because the minix std does
+# not yet expose uid/gid/tty/process APIs.
+feat_minix = [
+  # baseline set (verified to boot on minixrs)
+  "base32",
+  "base64",
+  "cat",
+  "echo",
+  "false",
+  "head",
+  "sleep",
+  "true",
+  # string/path tools
+  "basename",
+  "dirname",
+  "printf",
+  "seq",
+  "yes",
+  "test",
+  # text tools
+  "comm",
+  "cut",
+  "expand",
+  "fmt",
+  "fold",
+  "join",
+  "nl",
+  "paste",
+  "tac",
+  "tee",
+  "tr",
+  "unexpand",
+  "uniq",
+  "wc",
+  # environment
+  "printenv",
+  "factor",
+  "shuf",
+  "numfmt",
+  # encoding
+  "basenc",
+  # file overwrite
+  "shred",
+  # checksums
+  "cksum",
+  "b2sum",
+  "md5sum",
+  "sha1sum",
+  "sha224sum",
+  "sha256sum",
+  "sha384sum",
+  "sha512sum",
+  "sum",
+  # filesystem
+  # chmod is excluded: it needs std's unix MetadataExt/PermissionsExt mode
+  # bits, which the minix std does not expose (the OS ships its own chmod).
+  "ln",
+  "mkdir",
+  "od",
+  "pathchk",
+  "readlink",
+  "realpath",
+  # rm is excluded: its indicatif progress bar pulls in `console`, which has
+  # no non-unix fallback (the OS ships its own /bin/rm for now).
+  "rmdir",
+  "split",
+  "tail",
+  # touch is excluded: its filetime dep uses std::os::unix, which the minix
+  # std does not provide yet.
+  "truncate",
+  "tsort",
+  "sort",
+  "unlink",
+  # env and ptx are excluded: on x86 they hang with VM spinning in
+  # sys_vmctl_clear_pagefault after a page fault on an unmapped ~48 GiB
+  # address during exec — a pre-existing minixrs kernel/exec bug (the same
+  # signature hits the second pipe operation), not a uutils issue. pr is
+  # excluded: its uucore "entries" feature pulls unguarded libc
+  # (getgrgid/getpwnam), which does not build on minix. sync is excluded:
+  # it hits a #GP (corrupted stack return) on minix. pwd/mktemp are
+  # excluded: the minix std has no getcwd / temp-file support yet.
+]
+#
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = ["uu_test"]
 
@@ -453,6 +541,9 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(pgo_training)',
   'cfg(target_os, values("cygwin"))',
+  # the minixrs OS port (the fork's rustc knows minix natively; the host
+  # rustup toolchain does not, so declare it here to keep host builds clean)
+  'cfg(target_os, values("minix"))',
   'cfg(wasi_runner)',
 ] }
 unused_qualifications = "warn"
@@ -515,6 +606,12 @@ regex = { workspace = true, optional = true }
 textwrap.workspace = true
 uucore.workspace = true
 zip = { workspace = true, optional = true }
+# The `custom` feature selects getrandom's externally-registered backend. It is
+# only used on targets no built-in backend covers (minix), and it lets the
+# multicall binary register a weak RNG (src/bin/coreutils.rs) so the rand
+# users (factor, seq, shuf, sort) can build and run before the OS grows a
+# kernel entropy source.
+getrandom = { version = "0.2", features = ["custom"] }
 
 
 # * uutils

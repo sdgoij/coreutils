@@ -4,12 +4,12 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-pub use self::unix::{FilterWriter, instantiate_current_writer, paths_refer_to_same_file};
+pub use self::unix::{instantiate_current_writer, paths_refer_to_same_file, FilterWriter};
 
 #[cfg(windows)]
 pub use self::windows::{instantiate_current_writer, paths_refer_to_same_file};
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "minix"))]
 pub use self::wasi::{instantiate_current_writer, paths_refer_to_same_file};
 
 #[cfg(unix)]
@@ -18,7 +18,7 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(target_os = "wasi", target_os = "minix"))]
 mod wasi;
 
 // todo: add .as_fd for std::io::copy's specialization for --bytes

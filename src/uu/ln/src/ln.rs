@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{self, Write, stdout};
+use std::io::{self, stdout, Write};
 use uucore::display::Quotable;
 use uucore::error::{UError, UIoError, UResult};
 
@@ -23,7 +23,7 @@ use thiserror::Error;
 
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 /// Public visibility allows other apps to integrate with our
 /// `ln` utility by calling `exec` directly with their `Settings`.
@@ -528,4 +528,14 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
 #[cfg(any(unix, target_os = "wasi"))]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
+}
+
+#[cfg(target_os = "minix")]
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> io::Result<()> {
+    // The minix std does not expose a symlink call yet (the VFS link path is
+    // pending); hard links still go through std::fs::hard_link.
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "symbolic links are not supported on this platform",
+    ))
 }

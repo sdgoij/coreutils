@@ -27,7 +27,9 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 
-[target.'cfg(not(target_os = "wasi"))'.dependencies]
+# libc and notify have no minix backend; tail -f uses stubs on minix like
+# on WASI (no notify-based watcher).
+[target.'cfg(not(any(target_os = "wasi", target_os = "minix")))'.dependencies]
 libc = { workspace = true }
 notify = { workspace = true }
 

@@ -549,6 +549,7 @@ dependencies = [
  "ctor",
  "filetime",
  "fluent-syntax",
+ "getrandom 0.2.17",
  "glob",
  "hex-literal",
  "itertools 0.15.0",

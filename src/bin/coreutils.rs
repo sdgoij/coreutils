@@ -13,6 +13,59 @@ use uucore::{Args, error::strip_errno};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+// minixrs has no kernel entropy source yet; register a weak RNG so the rand
+// users (factor, seq, shuf, sort) can build and run. The backend mixes the
+// stack address, a monotonic counter and the cycle counter through SplitMix64.
+//
+// Two getrandom versions are in the tree: 0.2.x is selected via its `custom`
+// feature (enabled in Cargo.toml; only used when no built-in backend matches),
+// and 0.4.x is selected via RUSTFLAGS `--cfg getrandom_backend="custom"` on
+// the minix build. Both call the symbols defined below.
+#[cfg(target_os = "minix")]
+mod minix_rng {
+    use core::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn splitmix64(mut x: u64) -> impl FnMut() -> u64 {
+        move || {
+            x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut z = x;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            z ^ (z >> 31)
+        }
+    }
+
+    pub fn fill(dest: &mut [u8]) -> Result<(), getrandom::Error> {
+        let stack = core::ptr::addr_of!(COUNTER) as u64;
+        let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
+        #[cfg(target_arch = "x86_64")]
+        let cycles = unsafe { core::arch::x86_64::_rdtsc() };
+        #[cfg(not(target_arch = "x86_64"))]
+        let cycles = 0u64;
+        let mut next = splitmix64((stack << 32) ^ stack ^ counter ^ cycles);
+        for chunk in dest.chunks_mut(8) {
+            let x = next();
+            for (i, byte) in chunk.iter_mut().enumerate() {
+                *byte = (x >> (i * 8)) as u8;
+            }
+        }
+        Ok(())
+    }
+
+    getrandom::register_custom_getrandom!(fill);
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "Rust" fn __getrandom_v03_custom(
+        dest: *mut u8,
+        len: usize,
+    ) -> Result<(), getrandom::Error> {
+        let dest = unsafe { core::slice::from_raw_parts_mut(dest, len) };
+        fill(dest)
+    }
+}
+
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {

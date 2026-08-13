@@ -21,11 +21,14 @@ doctest = false
 memchr = { workspace = true }
 regex = { workspace = true }
 clap = { workspace = true }
-libc = { workspace = true }
 uucore = { workspace = true, features = ["buf-copy", "fs", "signals"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 tempfile = { workspace = true }
+
+# libc has no minix backend; tac's only libc use is cfg(unix)-gated.
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+libc = { workspace = true }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 memmap2 = { workspace = true }

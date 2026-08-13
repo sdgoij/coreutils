@@ -7,8 +7,9 @@ use crate::platform::Writer;
 use std::ffi::OsStr;
 use uucore::{display::Quotable, translate};
 
-// WASI has no process spawning (the `--filter` writer) and no fd-based inode
-// comparison, so it falls back to a path-based identity check via canonicalize.
+// WASI/minix have no process spawning (the `--filter` writer) and no fd-based
+// inode comparison, so they fall back to a path-based identity check via
+// canonicalize.
 pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {
     match (std::fs::canonicalize(p1), std::fs::canonicalize(p2)) {
         (Ok(a), Ok(b)) => a == b,

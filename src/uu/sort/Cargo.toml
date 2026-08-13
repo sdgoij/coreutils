@@ -46,7 +46,9 @@ foldhash = { workspace = true }
 [target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
 rustix = { workspace = true, features = ["fs", "system", "process"] }
 
-[target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
+# ctrlc pulls in nix which has no minix backend; sort's signal-handling
+# temp-dir cleanup is a no-op on minix like on redox/wasi.
+[target.'cfg(not(any(target_os = "redox", target_os = "wasi", target_os = "minix")))'.dependencies]
 ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
