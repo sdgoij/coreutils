@@ -13,7 +13,7 @@ mod platform;
 
 use clap::Command;
 use error::{ParseError, ParseErrorKind, ParseResult};
-use parser::{Operator, Symbol, UnaryOperator, parse};
+use parser::{parse, Operator, Symbol, UnaryOperator};
 #[cfg(windows)]
 use platform::fd_is_terminal;
 #[cfg(target_os = "wasi")]
@@ -324,10 +324,8 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     Ok(result)
 }
 
-#[cfg_attr(target_os = "minix", allow(unused_variables))] // parsed is only validated on minix
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
-    let parsed = fd
-        .to_str()
+    fd.to_str()
         .map(str::trim)
         .and_then(|s| s.parse::<i32>().ok())
         .ok_or_else(|| {
@@ -349,7 +347,6 @@ fn fd_is_terminal(fd: i32) -> bool {
 #[cfg(target_os = "minix")]
 fn fd_is_terminal(_fd: i32) -> bool {
     false
-}
 }
 
 #[derive(Eq, PartialEq)]

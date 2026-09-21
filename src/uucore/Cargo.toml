@@ -83,18 +83,12 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
-# uucore's minix platform code talks to the OS directly (features/minix.rs);
-# the crates.io unix machinery (rustix, libc, errno) has no minix branch and
-# would fail to build, so keep it out of the tree for minix only.
-[target.'cfg(not(target_os = "minix"))'.dependencies]
-libc = { workspace = true, optional = true }
-rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
-
-# uucore's minix platform code talks to the OS directly (features/minix.rs);
-# the crates.io unix machinery (rustix, libc, errno) has no minix branch and
-# would fail to build, so keep it out of the tree for minix only. rustix needs
-# no gate of its own: it is declared under `cfg(any(unix, windows, wasi))`
-# below, and minix is none of those.
+# uucore's minix code talks to std directly (the cfg(target_os = "minix")
+# branches in features/fs.rs and mods/io.rs); the crates.io unix machinery
+# (rustix, libc, errno) has no minix branch and would fail to build, so keep it
+# out of the tree for minix only. rustix needs no gate of its own: it is
+# declared under `cfg(any(unix, windows, wasi))` below, and minix is none of
+# those.
 [target.'cfg(not(target_os = "minix"))'.dependencies]
 libc = { workspace = true, optional = true }
 

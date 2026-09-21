@@ -36,7 +36,10 @@ pub mod extendedbigdecimal;
 pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
-#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
+#[cfg(all(
+    feature = "fs",
+    any(unix, windows, target_os = "wasi", target_os = "minix")
+))]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;

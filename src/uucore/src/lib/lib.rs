@@ -27,7 +27,10 @@ pub use uucore_procs::*;
 pub use crate::mods::clap_localization;
 pub use crate::mods::display;
 pub use crate::mods::error;
-#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
+#[cfg(all(
+    feature = "fs",
+    any(unix, windows, target_os = "wasi", target_os = "minix")
+))]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::locale;
@@ -56,7 +59,10 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(all(feature = "fs", any(unix, windows, target_os = "wasi")))]
+#[cfg(all(
+    feature = "fs",
+    any(unix, windows, target_os = "wasi", target_os = "minix")
+))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -173,7 +179,7 @@ pub use crate::features::smack;
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
+    sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
 };
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -185,7 +191,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
-use std::sync::{LazyLock, atomic::Ordering};
+use std::sync::{atomic::Ordering, LazyLock};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.

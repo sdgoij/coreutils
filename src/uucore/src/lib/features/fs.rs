@@ -1267,9 +1267,19 @@ fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
             std::os::windows::fs::symlink_file(target, dest)
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(any(unix, target_os = "wasi"))]
     {
         rustix::fs::symlinkat(target, rustix::fs::CWD, dest).map_err(Into::into)
+    }
+    #[cfg(target_os = "minix")]
+    {
+        // The minix std exposes no symlink call yet (the VFS link path is
+        // pending), so only the hard link above can be served here.
+        let _ = (target, dest);
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            "symbolic links are not supported on this platform",
+        ))
     }
 }
 
