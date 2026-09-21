@@ -333,6 +333,7 @@ feat_minix = [
   "uniq",
   "wc",
   # environment
+  "env",
   "printenv",
   "factor",
   "shuf",
@@ -352,33 +353,55 @@ feat_minix = [
   "sha512sum",
   "sum",
   # filesystem
-  # chmod is excluded: it needs std's unix MetadataExt/PermissionsExt mode
-  # bits, which the minix std does not expose (the OS ships its own chmod).
   "ln",
   "mkdir",
   "od",
   "pathchk",
   "readlink",
   "realpath",
-  # rm is excluded: its indicatif progress bar pulls in `console`, which has
-  # no non-unix fallback (the OS ships its own /bin/rm for now).
   "rmdir",
   "split",
+  "sync",
   "tail",
-  # touch is excluded: its filetime dep uses std::os::unix, which the minix
-  # std does not provide yet.
   "truncate",
   "tsort",
   "sort",
   "unlink",
-  # env and ptx are excluded: on x86 they hang with VM spinning in
-  # sys_vmctl_clear_pagefault after a page fault on an unmapped ~48 GiB
-  # address during exec — a pre-existing minixrs kernel/exec bug (the same
-  # signature hits the second pipe operation), not a uutils issue. pr is
-  # excluded: its uucore "entries" feature pulls unguarded libc
-  # (getgrgid/getpwnam), which does not build on minix. sync is excluded:
-  # it hits a #GP (corrupted stack return) on minix. pwd/mktemp are
-  # excluded: the minix std has no getcwd / temp-file support yet.
+  #
+  # Still excluded, reasons re-verified in an x86 guest on 2026-09-21 with a
+  # multicall built by the current stage1 (see _finish-bootstrap for the stale
+  # rlib cache that made the earlier notes misleading):
+  #   chmod  - front end is cfg(unix): needs std's unix mode bits (the OS
+  #            ships its own chmod).
+  #   rm     - indicatif -> `console`, which has no non-unix fallback (the OS
+  #            ships its own /bin/rm for now).
+  #   touch  - filetime uses std::os::unix.
+  #   pr     - excluded for now: running it wedges the guest (once with
+  #            `panic: index out of bounds: the len is 56 but the index is 56`,
+  #            once silently), but that panic is printed by minix-rt, not by
+  #            the std-based multicall, and no index in pr's page code is
+  #            unchecked, so it looks like another symptom rather than the
+  #            cause - see the note at the end of this list.
+  #   ptx    - hangs with no output and no prompt: the kernel-side signature
+  #            recorded before (VM spinning in sys_vmctl_clear_pagefault),
+  #            which is a kernel look, not a uutils fix.
+  #   pwd    - std's current_dir reports "operation not supported on this
+  #            platform" (no getcwd in the minix PAL yet).
+  #   mktemp - names its file (`/tmp/tmp.XXXXXXXX`) but creating it reports
+  #            the same, so the PAL needs create_new semantics.
+  # env's exec hang and sync's #GP were symptoms of the mixed-generation
+  # multicall, not of those tools, which is why they are in the list above.
+  #
+  # Watching a guest trip over `pr` turned up a family that is not pr's: in the
+  # same session, `coreutils seq 200 > big.txt` panicked in clap with a stored
+  # TypeId that is not a hash at all (0x0000000c00010013000000080000062b -
+  # packed counters, read where a type id should be), and `coreutils sort` on
+  # the file seq never created printed a stream of `U` bytes and killed the
+  # console - the same signature as the trap dumps in the original report, and
+  # as the VM spinning in sys_vmctl_clear_pagefault recorded earlier. Those are
+  # memory corruption in the guest; the tools only trip it, so it wants a
+  # kernel/VM (or minix-std allocator) look rather than a uutils fix, and the
+  # tools above are as affected as the ones excluded here.
 ]
 #
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)

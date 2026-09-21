@@ -13,18 +13,14 @@
 // this conversion needs to be done only once in the beginning and at the end.
 
 use std::ffi::OsString;
-#[cfg(unix)]
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
-#[cfg(target_os = "wasi")]
-use std::os::wasi::ffi::{OsStrExt, OsStringExt};
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
 
-#[cfg(not(windows))]
-use u8 as NativeIntCharU;
 #[cfg(windows)]
 use u16 as NativeIntCharU;
+#[cfg(not(windows))]
+use u8 as NativeIntCharU;
 
 pub type NativeCharInt = NativeIntCharU;
 pub type NativeIntStr = [NativeCharInt];
@@ -103,7 +99,7 @@ impl<'a> Convert<OsString, Cow<'a, NativeIntStr>> for NCvt {
 
         #[cfg(not(windows))]
         {
-            Cow::Owned(f.into_vec())
+            Cow::Owned(f.into_encoded_bytes())
         }
     }
 }
@@ -142,7 +138,7 @@ pub fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
 
     #[cfg(not(windows))]
     {
-        Cow::Borrowed(input.as_bytes())
+        Cow::Borrowed(input.as_encoded_bytes())
     }
 }
 
@@ -156,8 +152,12 @@ pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, O
     #[cfg(not(windows))]
     {
         match input {
-            Cow::Borrowed(borrow) => Cow::Borrowed(OsStr::from_bytes(borrow)),
-            Cow::Owned(own) => Cow::Owned(OsString::from_vec(own)),
+            // SAFETY: minix and unix OsStrings are byte-based, so the encoded
+            // bytes are the raw bytes (as on unix via OsStrExt).
+            Cow::Borrowed(borrow) => {
+                Cow::Borrowed(unsafe { OsStr::from_encoded_bytes_unchecked(borrow) })
+            }
+            Cow::Owned(own) => Cow::Owned(unsafe { OsString::from_encoded_bytes_unchecked(own) }),
         }
     }
 }
@@ -171,7 +171,8 @@ pub fn from_native_int_representation_owned(input: NativeIntString) -> OsString 
 
     #[cfg(not(windows))]
     {
-        OsString::from_vec(input)
+        // SAFETY: minix and unix OsStrings are byte-based (see above).
+        unsafe { OsString::from_encoded_bytes_unchecked(input) }
     }
 }
 
@@ -180,14 +181,22 @@ pub fn get_single_native_int_value(c: char) -> Option<NativeCharInt> {
     {
         let mut buf = [0u16, 0];
         let s = c.encode_utf16(&mut buf);
-        if s.len() == 1 { Some(buf[0]) } else { None }
+        if s.len() == 1 {
+            Some(buf[0])
+        } else {
+            None
+        }
     }
 
     #[cfg(not(windows))]
     {
         let mut buf = [0u8, 0, 0, 0];
         let s = c.encode_utf8(&mut buf);
-        if s.len() == 1 { Some(buf[0]) } else { None }
+        if s.len() == 1 {
+            Some(buf[0])
+        } else {
+            None
+        }
     }
 }
 
