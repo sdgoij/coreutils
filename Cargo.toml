@@ -326,6 +326,8 @@ feat_minix = [
   "join",
   "nl",
   "paste",
+  "pr",
+  "ptx",
   "tac",
   "tee",
   "tr",
@@ -376,15 +378,6 @@ feat_minix = [
   #   rm     - indicatif -> `console`, which has no non-unix fallback (the OS
   #            ships its own /bin/rm for now).
   #   touch  - filetime uses std::os::unix.
-  #   pr     - excluded for now: running it wedges the guest (once with
-  #            `panic: index out of bounds: the len is 56 but the index is 56`,
-  #            once silently), but that panic is printed by minix-rt, not by
-  #            the std-based multicall, and no index in pr's page code is
-  #            unchecked, so it looks like another symptom rather than the
-  #            cause - see the note at the end of this list.
-  #   ptx    - hangs with no output and no prompt: the kernel-side signature
-  #            recorded before (VM spinning in sys_vmctl_clear_pagefault),
-  #            which is a kernel look, not a uutils fix.
   #   pwd    - std's current_dir reports "operation not supported on this
   #            platform" (no getcwd in the minix PAL yet).
   #   mktemp - names its file (`/tmp/tmp.XXXXXXXX`) but creating it reports
@@ -392,16 +385,15 @@ feat_minix = [
   # env's exec hang and sync's #GP were symptoms of the mixed-generation
   # multicall, not of those tools, which is why they are in the list above.
   #
-  # Watching a guest trip over `pr` turned up a family that is not pr's: in the
-  # same session, `coreutils seq 200 > big.txt` panicked in clap with a stored
-  # TypeId that is not a hash at all (0x0000000c00010013000000080000062b -
-  # packed counters, read where a type id should be), and `coreutils sort` on
-  # the file seq never created printed a stream of `U` bytes and killed the
-  # console - the same signature as the trap dumps in the original report, and
-  # as the VM spinning in sys_vmctl_clear_pagefault recorded earlier. Those are
-  # memory corruption in the guest; the tools only trip it, so it wants a
-  # kernel/VM (or minix-std allocator) look rather than a uutils fix, and the
-  # tools above are as affected as the ones excluded here.
+  # pr and ptx returned to the list above on 2026-09-23. pr's exclusion
+  # ("index out of bounds: the len is 56 but the index is 56") was not pr's: VFS
+  # built the REQ_LOOKUP path into the 56-byte message and wrote its terminator
+  # one byte past the end for a path of 24 bytes or more, which killed the
+  # filesystem server. pr reached it because it formats a timestamp and jiff's
+  # system timezone probes a /usr/share/zoneinfo path that long (KNOWN_ISSUES.md
+  # item 19, fixed by sending the path in a grant). The `U` bytes `sort` printed
+  # and the clap TypeId that is not a hash were the separate defect of item 12,
+  # since fixed. Re-verified in an x86 guest.
 ]
 #
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
