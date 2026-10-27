@@ -294,10 +294,11 @@ feat_os_unix_redox = [
 ]
 # "feat_minix" == set of utilities which build/run on the minixrs OS.
 #
-# minix is not cfg(unix), so tools whose platform deps are gated behind
-# cfg(unix) build as-is; tools with unconditional rustix/libc deps have them
-# gated with cfg(not(target_os = "minix")) in their own Cargo.toml (see cat
-# for the pattern). Some tools carry small minix fallbacks in their code
+# The target now declares the unix family, so `cfg(unix)` arms are live here; the
+# platform dependency blocks that have no minix support (libc, rustix, nix,
+# errno) exclude minix with cfg(not(target_os = "minix")) in their own
+# Cargo.toml (see cat for the pattern), which keeps this set on uucore's std
+# paths. Some tools carry small minix fallbacks in their code
 # (e.g. tail's pid-check stubs, test's isatty) because the minix std does
 # not yet expose uid/gid/tty/process APIs.
 feat_minix = [
@@ -820,3 +821,18 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
+
+# The published libc has no minix arm, and this tree's target declares the unix
+# family, so libc's unix header tree would be selected and would not resolve.
+# The fork's own `src/minix` tree is what compiles, and what rustix and std name.
+# `errno` picks its backend with cfg_attr over unix/windows/wasi/hermit, so it
+# has the same problem; `crates/errno` is the port's implementation for it.
+# `terminal_size` asks rustix's termios for the window size, which the port's
+# rustix fork does not serve; `crates/terminal_size` asks the tty server.
+# The new releases also reach rustix through `tempfile`, and the published rustix
+# cannot build for a target whose `std::os::unix` surface is the port's.
+[patch.crates-io]
+libc = { path = "../libc" }
+rustix = { path = "../rustix" }
+errno = { path = "../crates/errno" }
+terminal_size = { path = "../crates/terminal_size" }

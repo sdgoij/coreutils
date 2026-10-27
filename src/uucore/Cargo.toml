@@ -82,15 +82,13 @@ fluent = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
-
-# uucore's minix code talks to std directly (the cfg(target_os = "minix")
-# branches in features/fs.rs and mods/io.rs); the crates.io unix machinery
-# (rustix, libc, errno) has no minix branch and would fail to build, so keep it
-# out of the tree for minix only. rustix needs no gate of its own: it is
-# declared under `cfg(any(unix, windows, wasi))` below, and minix is none of
-# those.
-[target.'cfg(not(target_os = "minix"))'.dependencies]
 libc = { workspace = true, optional = true }
+
+# `libc` and `rustix` are the forks (`[patch.crates-io]` in the root manifest), and
+# they carry the port's minix arms, so uucore's `cfg(unix)` code compiles against
+# them the way it does elsewhere. `nix` has no such fork and no minix arm, so it
+# stays out of the tree for minix; the feature lists below still name it, and on
+# minix those references resolve to nothing.
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -118,8 +116,12 @@ time = { workspace = true, optional = true, features = [
   "local-offset",
   "macros",
 ] }
-nix = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
+
+# `nix` is POSIX with no minix arm and no fork; the tools that need it stay out
+# of `feat_minix`.
+[target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
+nix = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }

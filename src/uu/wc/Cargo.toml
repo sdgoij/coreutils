@@ -29,7 +29,7 @@ uucore = { workspace = true, features = [
 ] }
 unicode-width = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
 libc = { workspace = true }
 rustix = { workspace = true, features = ["fs", "param"] }
 
