@@ -33,7 +33,10 @@ pub fn main(args: TokenStream, stream: TokenStream) -> TokenStream {
         // Initialize SIGPIPE state capture at process startup (Unix only).
         // This must be at module level to set up the .init_array static that runs
         // before main() to capture whether SIGPIPE was ignored by the parent process.
-        #[cfg(all(#signals, unix, not(any(target_os = "fuchsia", target_os = "haiku"))))]
+        // minix keeps out: its Rust binaries do not run `.init_array`, so the
+        // capture would never run and the accessors would answer for a state
+        // nobody recorded.
+        #[cfg(all(#signals, unix, not(any(target_os = "fuchsia", target_os = "haiku", target_os = "minix"))))]
         uucore::init_startup_state_capture!();
 
         pub fn uumain(args: impl uucore::Args) -> i32 {

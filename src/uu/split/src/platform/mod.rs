@@ -9,7 +9,7 @@ pub use self::unix::{instantiate_current_writer, paths_refer_to_same_file, Filte
 #[cfg(windows)]
 pub use self::windows::{instantiate_current_writer, paths_refer_to_same_file};
 
-#[cfg(any(target_os = "wasi", target_os = "minix"))]
+#[cfg(target_os = "wasi")]
 pub use self::wasi::{instantiate_current_writer, paths_refer_to_same_file};
 
 #[cfg(unix)]
@@ -18,7 +18,7 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
-#[cfg(any(target_os = "wasi", target_os = "minix"))]
+#[cfg(target_os = "wasi")]
 mod wasi;
 
 // todo: add .as_fd for std::io::copy's specialization for --bytes

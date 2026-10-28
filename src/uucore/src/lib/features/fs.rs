@@ -54,14 +54,14 @@ macro_rules! has {
 /// Information to uniquely identify a file
 #[derive(Clone)]
 pub struct FileInformation(
-    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
+    #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))] rustix::fs::Stat,
     #[cfg(windows)] BY_HANDLE_FILE_INFORMATION,
     #[cfg(target_os = "minix")] fs::Metadata,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -90,7 +90,7 @@ impl FileInformation {
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(any(unix, target_os = "wasi"))]
+        #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
         {
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
@@ -126,7 +126,7 @@ impl FileInformation {
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(any(unix, target_os = "wasi"))]
+        #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
@@ -147,7 +147,7 @@ impl FileInformation {
     }
 
     pub fn number_of_links(&self) -> u64 {
-        #[cfg(any(unix, target_os = "wasi"))]
+        #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
         {
             #[cfg(any(target_os = "aix", target_os = "haiku"))]
             return self.0.st_nlink.try_into().unwrap();
@@ -163,7 +163,7 @@ impl FileInformation {
         return 1;
     }
 
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
     pub fn inode(&self) -> u64 {
         #[cfg(target_os = "haiku")]
         return self.0.st_ino.try_into().unwrap();
@@ -180,7 +180,7 @@ impl FileInformation {
     }
 }
 
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
@@ -208,7 +208,7 @@ impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(any(unix, target_os = "wasi"))]
+        #[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
@@ -899,7 +899,7 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// # Arguments
 ///
 /// * `path` - A reference to the path to be checked.
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(all(any(unix, target_os = "wasi"), not(target_os = "minix")))]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
     #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
@@ -939,7 +939,10 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 ///
 /// * `bool` - Returns `true` if stdin is a directory, `false` otherwise.
 pub fn is_stdin_directory(stdin: &Stdin) -> bool {
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
+    #[cfg(all(
+        any(unix, all(target_os = "wasi", target_env = "p2")),
+        not(target_os = "minix")
+    ))]
     {
         use mode::{S_IFDIR, S_IFMT};
         if let Ok(stat) = rustix::fs::fstat(stdin) {
@@ -1270,16 +1273,6 @@ fn create_link_std(target: &Path, dest: &Path, symbolic: bool) -> IOResult<()> {
     #[cfg(any(unix, target_os = "wasi"))]
     {
         rustix::fs::symlinkat(target, rustix::fs::CWD, dest).map_err(Into::into)
-    }
-    #[cfg(target_os = "minix")]
-    {
-        // The minix std exposes no symlink call yet (the VFS link path is
-        // pending), so only the hard link above can be served here.
-        let _ = (target, dest);
-        Err(Error::new(
-            ErrorKind::Unsupported,
-            "symbolic links are not supported on this platform",
-        ))
     }
 }
 

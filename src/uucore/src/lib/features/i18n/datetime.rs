@@ -173,6 +173,7 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
     unix,
     not(target_os = "android"),
     not(target_os = "cygwin"),
+    not(target_os = "minix"),
     not(target_os = "redox")
 ))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
@@ -230,6 +231,7 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     not(unix),
     target_os = "android",
     target_os = "cygwin",
+    target_os = "minix",
     target_os = "redox"
 ))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {

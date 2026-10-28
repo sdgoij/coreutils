@@ -27,7 +27,7 @@ fluent = { workspace = true }
 tempfile = { workspace = true }
 
 # libc has no minix backend; tac's only libc use is cfg(unix)-gated.
-[target.'cfg(not(target_os = "minix"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]

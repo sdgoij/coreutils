@@ -10,11 +10,11 @@
 //! It provides a way to convert signal names to their corresponding values and vice versa.
 //! It also provides a way to ignore the SIGINT signal and enable pipe errors.
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use nix::errno::Errno;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::libc;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use nix::sys::signal::{
     SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
     Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
@@ -42,6 +42,15 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
     "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
     "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
+];
+
+/// The port's signals, by number (`tools/c-include/signal.h`). The numbers that
+/// header leaves undefined stay empty strings, so no name matches them.
+#[cfg(target_os = "minix")]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
+    "USR2", "PIPE", "ALRM", "TERM", "", "", "", "", "CHLD", "", "", "", "", "", "", "", "WINCH",
+    "", "", "SYS",
 ];
 
 /*
@@ -598,7 +607,7 @@ pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
 }
 
 /// Restores SIGPIPE to default behavior (process terminates on broken pipe).
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
@@ -608,14 +617,14 @@ pub fn enable_pipe_errors() -> Result<(), Errno> {
 /// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
 /// Use this to override the default SIGPIPE handling when you need to handle
 /// broken pipe errors gracefully (e.g., tee with --output-error).
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub fn disable_pipe_errors() -> Result<(), Errno> {
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
 }
 
 /// Ignores the SIGINT signal.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
@@ -623,7 +632,7 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 }
 
 /// Installs a signal handler. The handler must be async-signal-safe.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub fn install_signal_handler(
     sig: i32,
     handler: extern "C" fn(core::ffi::c_int),
@@ -636,6 +645,63 @@ pub fn install_signal_handler(
     );
     unsafe { sigaction(signal, &action) }?;
     Ok(())
+}
+
+/// Restores SIGPIPE to default behaviour (the process ends on a broken pipe).
+#[cfg(target_os = "minix")]
+pub fn enable_pipe_errors() -> std::io::Result<()> {
+    pipe_errors(libc::SIG_DFL)
+}
+
+/// Ignores SIGPIPE, so a broken pipe comes back as an error instead of ending
+/// the process (e.g. tee with --output-error).
+#[cfg(target_os = "minix")]
+pub fn disable_pipe_errors() -> std::io::Result<()> {
+    pipe_errors(libc::SIG_IGN)
+}
+
+#[cfg(target_os = "minix")]
+fn pipe_errors(handler: libc::sighandler_t) -> std::io::Result<()> {
+    // SAFETY: this installs one of the two disposition constants, not a handler
+    // that could run in an arbitrary context.
+    if unsafe { libc::signal(libc::SIGPIPE, handler) } == libc::SIG_ERR {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Ignores the SIGINT signal.
+#[cfg(target_os = "minix")]
+pub fn ignore_interrupts() -> std::io::Result<()> {
+    // SAFETY: as `pipe_errors`.
+    if unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) } == libc::SIG_ERR {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Installs a signal handler. The handler must be async-signal-safe.
+#[cfg(target_os = "minix")]
+pub fn install_signal_handler(
+    sig: i32,
+    handler: extern "C" fn(core::ffi::c_int),
+) -> std::io::Result<()> {
+    // The port's `struct sigaction` carries the handler address, the mask and
+    // the flags; a zero mask blocks nothing extra around the handler.
+    let act = libc::sigaction {
+        sa_sigaction: handler as libc::sighandler_t,
+        sa_mask: [0; 2],
+        sa_flags: 0,
+        sa_restorer: 0,
+    };
+    // SAFETY: `act` is fully initialised and the kernel only reads it.
+    if unsafe { libc::sigaction(sig, &act, core::ptr::null_mut()) } < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 // Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
@@ -663,7 +729,7 @@ static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
 #[cfg(unix)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn capture_startup_state() {
-    use nix::libc;
+    use libc;
     use std::mem::MaybeUninit;
     use std::ptr;
 

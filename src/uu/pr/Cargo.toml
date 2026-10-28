@@ -18,7 +18,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "time"] }
+uucore = { workspace = true, features = ["time"] }
 itertools = { workspace = true }
 memchr = { workspace = true }
 regex = { workspace = true }

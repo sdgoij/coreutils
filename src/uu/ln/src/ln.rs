@@ -529,13 +529,3 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
 }
-
-#[cfg(target_os = "minix")]
-pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> io::Result<()> {
-    // The minix std does not expose a symlink call yet (the VFS link path is
-    // pending); hard links still go through std::fs::hard_link.
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "symbolic links are not supported on this platform",
-    ))
-}

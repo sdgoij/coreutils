@@ -21,7 +21,7 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "fsxattr", "mode"] }
 fluent = { workspace = true }
 
-[target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process", "fs"] }
 
 [features]

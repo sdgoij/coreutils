@@ -11,6 +11,11 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::{Args, error::strip_errno};
 
+// The port's C library is a Rust crate, so the C symbols rustix's libc
+// backend, jiff, tempfile and the allocator name are linked from here.
+#[cfg(target_os = "minix")]
+use minix_libc as _;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // minixrs has no kernel entropy source yet; register a weak RNG so the rand

@@ -4,22 +4,22 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-pub use self::unix::{
-    //stdin_is_bad_fd, stdin_is_pipe_or_fifo, supports_pid_checks, Pid, ProcessChecker,
-    supports_pid_checks,
-    Pid,
-    ProcessChecker,
-};
+pub use self::unix::{supports_pid_checks, Pid};
+
+// `tail -f` cannot work without inotify, so nothing constructs the checker on
+// minix.
+#[cfg(all(unix, not(target_os = "minix")))]
+pub use self::unix::ProcessChecker;
 
 #[cfg(windows)]
 pub use self::windows::{supports_pid_checks, Pid, ProcessChecker};
 
-// WASI and minix have no process-management APIs exposed yet; provide stubs
-// so tail compiles.
-#[cfg(any(target_os = "wasi", target_os = "minix"))]
+// WASI has no process-management APIs exposed yet; provide stubs so tail
+// compiles.
+#[cfg(target_os = "wasi")]
 pub type Pid = u64;
 
-#[cfg(any(target_os = "wasi", target_os = "minix"))]
+#[cfg(target_os = "wasi")]
 pub fn supports_pid_checks(_pid: Pid) -> bool {
     false
 }

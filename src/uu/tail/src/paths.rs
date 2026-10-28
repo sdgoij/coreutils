@@ -10,11 +10,11 @@ use std::ffi::OsStr;
 use std::fs::{File, Metadata};
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
 use uucore::error::UResult;
-use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
+use uucore::quoting_style::{locale_aware_escape_name, QuotingStyle};
 use uucore::translate;
 
 #[derive(Debug, Clone)]
@@ -191,6 +191,7 @@ impl MetadataExtTail for Metadata {
     fn file_id_eq(&self, #[cfg(unix)] other: &Metadata, #[cfg(not(unix))] _: &Metadata) -> bool {
         #[cfg(unix)]
         {
+            use std::os::unix::fs::MetadataExt;
             self.ino().eq(&other.ino())
         }
         #[cfg(windows)]

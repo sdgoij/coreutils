@@ -23,7 +23,7 @@ fluent = { workspace = true }
 
 # libc has no minix backend; rmdir defines the errno constants it needs
 # locally for minix.
-[target.'cfg(not(target_os = "minix"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
 [lints]

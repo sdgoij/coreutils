@@ -84,11 +84,10 @@ unic-langid = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true, optional = true }
 
-# `libc` and `rustix` are the forks (`[patch.crates-io]` in the root manifest), and
-# they carry the port's minix arms, so uucore's `cfg(unix)` code compiles against
-# them the way it does elsewhere. `nix` has no such fork and no minix arm, so it
-# stays out of the tree for minix; the feature lists below still name it, and on
-# minix those references resolve to nothing.
+# `libc` and `rustix` are the forks (`[patch.crates-io]` in the root manifest)
+# and carry the port's minix arms, so uucore's `cfg(unix)` code compiles against
+# them. `nix` has no minix arm and no fork, so it stays out of the tree for
+# minix; the feature lists below still name it, which resolves to nothing there.
 
 [dev-dependencies]
 tempfile = { workspace = true }

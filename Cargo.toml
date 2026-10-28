@@ -196,7 +196,6 @@ feat_Tier1 = [
   "feat_common_core",
   "df",
   "du",
-  "env",
   "hostname",
   "kill",
   "nohup",
@@ -336,7 +335,6 @@ feat_minix = [
   "uniq",
   "wc",
   # environment
-  "env",
   "printenv",
   "factor",
   "shuf",
@@ -776,6 +774,12 @@ rustix = { workspace = true, features = ["param", "use-libc-auxv"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
+
+# The multicall links the port's C library statically. rustix's libc backend,
+# jiff, tempfile and the allocator all name C symbols, and minix-libc is the
+# Rust implementation of them, so the binary stays static with no loader.
+[target.'cfg(target_os = "minix")'.dependencies]
+minix-libc = { path = "../crates/minix-libc" }
 
 # * uutils
 chcon = { optional = true, version = "0.13.0", package = "uu_chcon", path = "src/uu/chcon" }

@@ -555,6 +555,7 @@ dependencies = [
  "itertools 0.15.0",
  "jiff",
  "libc",
+ "minix-libc",
  "nix",
  "num-prime",
  "phf",
@@ -1952,6 +1953,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
+name = "minix-libc"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "minix-rt",
+ "minix-std",
+ "net",
+]
+
+[[package]]
+name = "minix-rt"
+version = "0.1.0"
+
+[[package]]
+name = "minix-std"
+version = "0.1.0"
+dependencies = [
+ "minix-rt",
+ "net",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1972,6 +1995,10 @@ dependencies = [
  "wasi",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "net"
+version = "0.1.0"
 
 [[package]]
 name = "nix"

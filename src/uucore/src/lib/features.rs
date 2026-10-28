@@ -126,6 +126,7 @@ pub mod selinux;
         target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
+        target_os = "minix",
         target_os = "netbsd",
         target_os = "openbsd",
         target_os = "redox",

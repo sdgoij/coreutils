@@ -129,6 +129,7 @@ pub use crate::features::safe_traversal;
         target_os = "hurd",
         target_os = "illumos",
         target_os = "linux",
+        target_os = "minix",
         target_os = "netbsd",
         target_os = "openbsd",
         target_os = "redox",
@@ -175,9 +176,9 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use nix::errno::Errno;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use nix::sys::signal::{
     sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
 };
@@ -195,7 +196,7 @@ use std::sync::{atomic::Ordering, LazyLock};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     unsafe {
         sigaction(
@@ -209,6 +210,13 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
             &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
         )
     }?;
+    Ok(())
+}
+
+/// The port's `std` installs no stack-overflow handlers, so there is nothing to
+/// take back.
+#[cfg(target_os = "minix")]
+pub fn disable_rust_signal_handlers() -> Result<(), std::io::Error> {
     Ok(())
 }
 

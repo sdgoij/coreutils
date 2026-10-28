@@ -43,7 +43,7 @@ uucore = { workspace = true, features = [
 fluent = { workspace = true }
 foldhash = { workspace = true }
 
-[target.'cfg(all(unix, not(any(target_os = "minix", target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
+[target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
 rustix = { workspace = true, features = ["fs", "system", "process"] }
 
 # ctrlc pulls in nix which has no minix backend; sort's signal-handling
@@ -51,7 +51,7 @@ rustix = { workspace = true, features = ["fs", "system", "process"] }
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi", target_os = "minix")))'.dependencies]
 ctrlc = { workspace = true }
 
-[target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
 [dev-dependencies]

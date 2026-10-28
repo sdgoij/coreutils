@@ -21,7 +21,7 @@ rand = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
 fluent = { workspace = true }
 
-[target.'cfg(not(target_os = "minix"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
 [lints]
