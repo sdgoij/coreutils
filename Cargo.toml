@@ -334,6 +334,9 @@ feat_minix = [
   "unexpand",
   "uniq",
   "wc",
+  # filesystem
+  "pwd",
+  "mktemp",
   # environment
   "printenv",
   "factor",
@@ -372,17 +375,19 @@ feat_minix = [
   # Still excluded, reasons re-verified in an x86 guest on 2026-09-21 with a
   # multicall built by the current stage1 (see _finish-bootstrap for the stale
   # rlib cache that made the earlier notes misleading):
-  #   chmod  - front end is cfg(unix): needs std's unix mode bits (the OS
-  #            ships its own chmod).
+  #   chmod  - front end is cfg(unix) and pulls in uucore's unix surface
+  #            (`getpwnam`/`getgrgid`, `nix`, `MetadataExt::atime`), which the
+  #            port does not carry (the OS ships its own chmod).
+  #   env    - its exec path is nix's execvp (no nix on minix) and its
+  #            --ignore-signal path is nix's sigprocmask; nothing needs it yet.
   #   rm     - indicatif -> `console`, which has no non-unix fallback (the OS
   #            ships its own /bin/rm for now).
   #   touch  - filetime uses std::os::unix.
-  #   pwd    - std's current_dir reports "operation not supported on this
-  #            platform" (no getcwd in the minix PAL yet).
-  #   mktemp - names its file (`/tmp/tmp.XXXXXXXX`) but creating it reports
-  #            the same, so the PAL needs create_new semantics.
-  # env's exec hang and sync's #GP were symptoms of the mixed-generation
-  # multicall, not of those tools, which is why they are in the list above.
+  #
+  # pwd and mktemp left this list with the `getcwd`, `DirEntryExt` and
+  # `create_new` work, and ran in an x86 guest. env's exec hang and sync's #GP
+  # were symptoms of the mixed-generation multicall, not of those tools: sync
+  # is in the set above, and env stays out for the reasons listed.
   #
   # pr and ptx returned to the list above on 2026-09-23. pr's exclusion
   # ("index out of bounds: the len is 56 but the index is 56") was not pr's: VFS
