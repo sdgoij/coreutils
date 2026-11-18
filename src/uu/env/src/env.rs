@@ -18,12 +18,17 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
     from_native_int_representation_owned, get_single_native_int_value,
 };
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 use nix::libc;
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use nix::unistd::execvp;
+// minix has no `nix` (its `Signal` enum and errno tables assume a Linux-shaped
+// libc), so the same calls come from the port's own C library, which implements
+// `signal`, `sigprocmask`, the `sigset_t` operations and `execvp`.
+#[cfg(target_os = "minix")]
+type SigSet = libc::sigset_t;
 use std::borrow::Cow;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use std::collections::BTreeMap;
@@ -41,15 +46,16 @@ use std::io::stderr;
 use std::mem::zeroed;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "minix")]
+use std::os::unix::ffi::OsStringExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
+#[cfg(all(unix, not(target_os = "minix"), not(target_os = "fuchsia")))]
+use uucore::signals::realtime_signal_bounds;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-use uucore::signals::{
-    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
-    signal_number_upper_bound,
-};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -296,7 +302,7 @@ fn build_signal_request(
     Ok(request)
 }
 
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 fn signal_is_valid(sig: usize) -> bool {
     if Signal::try_from(sig as i32).is_err() {
         // nix::sys::signal does not know about real-time signals, so check that
@@ -309,6 +315,13 @@ fn signal_is_valid(sig: usize) -> bool {
     }
 
     true
+}
+
+/// The port's signals are 1..=31 (`tools/c-include/signal.h`), with no
+/// real-time range past them, so the number alone is the test.
+#[cfg(target_os = "minix")]
+fn signal_is_valid(sig: usize) -> bool {
+    (1..=31).contains(&sig)
 }
 
 pub fn uu_app() -> Command {
@@ -873,7 +886,7 @@ impl EnvAppData {
             }
         }
 
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "minix")))]
         {
             // Use execvp() directly to preserve signal handlers set by apply_signal_action().
             // Command::exec() would reset SIGPIPE, interfering with --ignore-signal=PIPE.
@@ -914,6 +927,101 @@ impl EnvAppData {
                     Err(126.into())
                 }
             }
+        }
+
+        #[cfg(target_os = "minix")]
+        {
+            // The port's C library has `execvp` (`crates/minix-libc`), but it
+            // passes C's `environ`, while the variables env just set live in
+            // `std`'s own environment map (the minix PAL keeps one of its own),
+            // so the block is built from `std::env` and `execve` is called
+            // here. The search is POSIX's: an empty `PATH` element means the
+            // current directory, a missing `PATH` falls back to the port's
+            // `/bin:/sbin` (the image has no `/usr/bin`).
+            let mut argv = Vec::new();
+            let arg0_os: &OsStr = arg0.as_ref();
+            let Ok(arg0_cstring) = CString::new(arg0_os.as_bytes()) else {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            };
+            argv.push(arg0_cstring);
+            for arg in args {
+                let arg_os = arg;
+                let Ok(arg_cstring) = CString::new(arg_os.as_bytes()) else {
+                    return Err(self.make_error_no_such_file_or_dir(&prog));
+                };
+                argv.push(arg_cstring);
+            }
+            let mut argv_ptrs: Vec<*const libc::c_char> =
+                argv.iter().map(|s| s.as_ptr()).collect();
+            argv_ptrs.push(core::ptr::null());
+
+            // std's environment, which is what the exec must receive.
+            let mut envp: Vec<CString> = Vec::new();
+            for (key, value) in env::vars_os() {
+                let mut entry = key.into_vec();
+                entry.push(b'=');
+                entry.extend_from_slice(value.as_bytes());
+                if let Ok(entry) = CString::new(entry) {
+                    envp.push(entry);
+                }
+            }
+            let mut envp_ptrs: Vec<*const libc::c_char> =
+                envp.iter().map(|s| s.as_ptr()).collect();
+            envp_ptrs.push(core::ptr::null());
+
+            // A name with a slash is used as it is; otherwise `PATH` is
+            // searched, an empty element meaning the current directory.
+            let prog_os: &OsStr = prog.as_ref();
+            let name = prog_os.as_bytes();
+            let candidates: Vec<Vec<u8>> = if name.contains(&b'/') {
+                vec![name.to_vec()]
+            } else {
+                let path = env::var_os("PATH")
+                    .map(|p| p.into_vec())
+                    .unwrap_or_else(|| b"/bin:/sbin".to_vec());
+                path.split(|&b| b == b':')
+                    .map(|dir| {
+                        let dir: &[u8] = if dir.is_empty() { b"." } else { dir };
+                        let mut full = dir.to_vec();
+                        full.push(b'/');
+                        full.extend_from_slice(name);
+                        full
+                    })
+                    .collect()
+            };
+
+            let mut saw_eacces = false;
+            let mut last_err = std::io::Error::from_raw_os_error(libc::ENOENT);
+            for candidate in candidates {
+                let Ok(candidate) = CString::new(candidate) else {
+                    continue;
+                };
+                // execve never returns on success.
+                unsafe { libc::execve(candidate.as_ptr(), argv_ptrs.as_ptr(), envp_ptrs.as_ptr()) };
+                let err = std::io::Error::last_os_error();
+                match err.raw_os_error() {
+                    Some(libc::ENOENT) | Some(libc::ENOTDIR) => last_err = err,
+                    Some(libc::EACCES) => {
+                        saw_eacces = true;
+                        last_err = err;
+                    }
+                    _ => {
+                        last_err = err;
+                        break;
+                    }
+                }
+            }
+
+            // POSIX: a programme that was found but not executable outranks
+            // one that was not found at all.
+            if saw_eacces && last_err.raw_os_error() == Some(libc::ENOENT) {
+                last_err = std::io::Error::from_raw_os_error(libc::EACCES);
+            }
+            if last_err.raw_os_error() == Some(libc::ENOENT) {
+                return Err(self.make_error_no_such_file_or_dir(&prog));
+            }
+            uucore::show_error!("{}: {}", prog.quote(), strip_errno(&last_err));
+            Err(126.into())
         }
 
         #[cfg(not(unix))]
@@ -1134,7 +1242,7 @@ where
     })
 }
 
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 fn ignore_signal(sig: usize) -> UResult<()> {
     // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
@@ -1152,7 +1260,7 @@ fn ignore_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 fn reset_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
@@ -1169,7 +1277,7 @@ fn reset_signal(sig: usize) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
     // nix::sys::signal::Signal does not cover real time signals, so we need to build
     // sigset_t manually using libc.
@@ -1202,7 +1310,7 @@ fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
     Ok(unsafe { SigSet::from_sigset_t_unchecked(sigset) })
 }
 
-#[cfg(all(unix, not(target_os = "fuchsia")))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_os = "minix")))]
 fn block_signal(sig: usize) -> UResult<()> {
     let set = sigset_from_signal_value(sig)?;
 
@@ -1213,6 +1321,77 @@ fn block_signal(sig: usize) -> UResult<()> {
                 "env-error-failed-set-signal-action",
                 "signal" => (sig as i32),
                 "error" => err.desc()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// minix's `ignore_signal`: one call to the port's `signal`, no `nix`.
+#[cfg(target_os = "minix")]
+fn ignore_signal(sig: usize) -> UResult<()> {
+    set_signal(sig, libc::SIG_IGN)
+}
+
+/// minix's `reset_signal`.
+#[cfg(target_os = "minix")]
+fn reset_signal(sig: usize) -> UResult<()> {
+    set_signal(sig, libc::SIG_DFL)
+}
+
+/// Set one signal's disposition on minix.
+///
+/// The port's `signal(2)` answers the previous disposition, or `SIG_ERR` with
+/// `errno` set (`tools/c-include/signal.h`), which is the only error channel it
+/// has; `nix`'s `Errno::result` is what that stands in for elsewhere.
+#[cfg(target_os = "minix")]
+fn set_signal(sig: usize, handler: libc::sighandler_t) -> UResult<()> {
+    // SAFETY: the handler is written once per signal, so "the current handler is
+    // the default", as `signal(2)` requires.
+    let res = unsafe { libc::signal(sig as core::ffi::c_int, handler) };
+    if res == libc::SIG_ERR {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => strip_errno(&std::io::Error::last_os_error())
+            ),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "minix")]
+fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
+    let mut sigset: libc::sigset_t = unsafe { zeroed() };
+
+    let cleared = unsafe { libc::sigemptyset(&raw mut sigset) };
+    let added = unsafe { libc::sigaddset(&raw mut sigset, sig as core::ffi::c_int) };
+    if cleared != 0 || added != 0 {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => strip_errno(&std::io::Error::last_os_error())
+            ),
+        ));
+    }
+    Ok(sigset)
+}
+
+#[cfg(target_os = "minix")]
+fn block_signal(sig: usize) -> UResult<()> {
+    let set = sigset_from_signal_value(sig)?;
+    let res = unsafe { libc::sigprocmask(libc::SIG_BLOCK, &set, core::ptr::null_mut()) };
+    if res != 0 {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => strip_errno(&std::io::Error::last_os_error())
             ),
         ));
     }

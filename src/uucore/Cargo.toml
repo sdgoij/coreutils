@@ -84,6 +84,12 @@ unic-langid = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true, optional = true }
 
+# The minix arms of `signals` and of the panic hook call the port's C library
+# directly (there is no `nix` on minix), and they are compiled whatever the
+# feature selection is, so `libc` is not optional for that target.
+[target.'cfg(target_os = "minix")'.dependencies]
+libc = { workspace = true }
+
 # `libc` and `rustix` are the forks (`[patch.crates-io]` in the root manifest)
 # and carry the port's minix arms, so uucore's `cfg(unix)` code compiles against
 # them. `nix` has no minix arm and no fork, so it stays out of the tree for

@@ -24,6 +24,13 @@ fluent = { workspace = true }
 [target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
 nix = { workspace = true, features = ["process", "signal"] }
 
+# On minix the same calls come from the port's own C library, which implements
+# `sigprocmask`, the `sigset_t` operations and `execvp` (`crates/minix-libc`).
+# `nix` itself does not build: its `Signal` enum and errno tables assume a
+# Linux-shaped libc.
+[target.'cfg(target_os = "minix")'.dependencies]
+libc = { workspace = true }
+
 [features]
 diagnostics = ["uucore/diagnostics"]
 
