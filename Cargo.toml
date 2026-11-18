@@ -328,6 +328,7 @@ feat_minix = [
   "whoami",
   "install",
   "mkfifo",
+  "chroot",
   "rm",
   # text tools
   "comm",
@@ -394,10 +395,11 @@ feat_minix = [
   # `getlogin` and the minix `pline`/`auditid` arms (item 55), logname and
   # whoami then needed only that `getlogin` (item 56), install needed
   # nothing new, reusing the safe-traversal, fchmod and fchown paths above
-  # (item 57), and mkfifo reuses VFS_MKNOD and rustix's minix `mknodat`
-  # (item 58).
+  # (item 57), mkfifo reuses VFS_MKNOD and rustix's minix `mknodat`
+  # (item 58), and chroot needed rustix's minix arm wired to VFS_CHROOT
+  # (item 59).
   #
-  # `feat_require_unix_core` (chroot, mknod, stat, stty) is still outside this
+  # `feat_require_unix_core` (mknod, stat, stty) is still outside this
   # set. `stat` pulls uucore's `fsext`, whose `statfs`/`strerror` half the port
   # does not serve; `mknod` uses `nix`, which has no minix arm.
   #
