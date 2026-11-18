@@ -323,6 +323,7 @@ feat_minix = [
   "chgrp",
   "chown",
   "groups",
+  "id",
   "rm",
   # text tools
   "comm",
@@ -385,12 +386,13 @@ feat_minix = [
   # VFS sending a null name to UNLINK/RMDIR, MFS then reading a stale `cch[]`
   # for it, and `fchmodat` rejecting `AT_SYMLINK_NOFOLLOW`. chgrp and chown
   # followed with `lchown`/`fchown` and `do_chown` honouring the same flag
-  # (item 53), and groups followed `getgrouplist` (item 54).
+  # (item 53), groups followed `getgrouplist` (item 54), and id followed
+  # `getlogin` and the minix `pline`/`auditid` arms (item 55).
   #
-  # `feat_require_unix_core` (chroot, id, install, logname, mkfifo, mknod, stat,
+  # `feat_require_unix_core` (chroot, install, logname, mkfifo, mknod, stat,
   # stty) is still outside this set. `stat` is nearest but pulls uucore's
-  # `fsext`, whose `statfs`/`strerror` half the port does not serve; `id` needs
-  # `getlogin` and its `pline`/`auditid` arms.
+  # `fsext`, whose `statfs`/`strerror` half the port does not serve; logname and
+  # whoami need only `getlogin`, which the port now has.
   #
   # env and touch left this list on 2026-11-17, with
   # `just test-coreutils-minix-<arch>` as the gate: env's exec is the port's

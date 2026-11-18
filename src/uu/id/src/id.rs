@@ -572,7 +572,8 @@ fn pline(possible_uid: Option<Uid>) -> io::Result<()> {
     target_os = "android",
     target_os = "openbsd",
     target_os = "cygwin",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "minix"
 ))]
 fn pline(possible_uid: Option<Uid>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
@@ -597,7 +598,8 @@ fn pline(possible_uid: Option<Uid>) -> io::Result<()> {
     target_os = "android",
     target_os = "openbsd",
     target_os = "cygwin",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "minix"
 ))]
 #[allow(clippy::unnecessary_wraps)]
 fn auditid() -> io::Result<()> {
@@ -609,7 +611,8 @@ fn auditid() -> io::Result<()> {
     target_os = "android",
     target_os = "openbsd",
     target_os = "cygwin",
-    target_os = "netbsd"
+    target_os = "netbsd",
+    target_os = "minix"
 )))]
 fn auditid() -> io::Result<()> {
     use std::mem::MaybeUninit;
@@ -762,7 +765,12 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "openbsd",
+    target_os = "minix"
+)))]
 mod audit {
     use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 
