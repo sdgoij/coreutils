@@ -95,6 +95,10 @@ pub mod safe_copy;
     not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
 ))]
 pub mod safe_traversal;
+/// The minix arm of `safe_traversal`: the `nix` surface it uses, over the
+/// port's C library (`nix` has no minix support).
+#[cfg(all(feature = "safe-traversal", target_os = "minix"))]
+pub mod safe_traversal_minix;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
 

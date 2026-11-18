@@ -18,7 +18,7 @@ use parser::{parse, Operator, Symbol, UnaryOperator};
 use platform::fd_is_terminal;
 #[cfg(target_os = "wasi")]
 use platform::path;
-#[cfg(all(not(any(windows, target_os = "wasi")), not(target_os = "minix")))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 use rustix::process::{getegid, geteuid};
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
@@ -381,7 +381,7 @@ pub(crate) fn modified_since_read(metadata: &fs::Metadata) -> bool {
     )
 }
 
-#[cfg(all(not(any(windows, target_os = "wasi")), not(target_os = "minix")))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::Metadata;
     use std::os::unix::fs::FileTypeExt;
@@ -437,30 +437,6 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::UserIdFlag => metadata.mode() & S_ISUID != 0,
         PathCondition::Writable => perm(metadata, Permission::Write),
         PathCondition::Executable => perm(metadata, Permission::Execute),
-    }
-}
-
-// minix std exposes no uid/gid/mode bits (no std::os::unix), so ownership,
-// permission-bit and device-type checks cannot be answered; the conditions
-// that std metadata can resolve are supported and the rest report false.
-#[cfg(target_os = "minix")]
-fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use std::fs::metadata;
-
-    let Ok(metadata) = metadata(path) else {
-        return false;
-    };
-
-    let file_type = metadata.file_type();
-    match condition {
-        PathCondition::Directory => file_type.is_dir(),
-        PathCondition::Exists | PathCondition::Readable => true,
-        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
-        PathCondition::Regular => file_type.is_file(),
-        PathCondition::NonEmpty => metadata.len() > 0,
-        PathCondition::Writable => !metadata.permissions().readonly(),
-        PathCondition::SymLink => file_type.is_symlink(),
-        _ => false,
     }
 }
 

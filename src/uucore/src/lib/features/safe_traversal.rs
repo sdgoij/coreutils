@@ -25,11 +25,33 @@ use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+// `nix` has no minix support, so the minix arm imports the same names from
+// `safe_traversal_minix`, which offers them over the port's own C library.
+#[cfg(not(target_os = "minix"))]
 use nix::dir::Dir;
-use nix::fcntl::{OFlag, openat};
+#[cfg(target_os = "minix")]
+use crate::features::safe_traversal_minix::Dir;
+
+#[cfg(not(target_os = "minix"))]
+use nix::fcntl::{AtFlags, OFlag, open, openat};
+#[cfg(target_os = "minix")]
+use crate::features::safe_traversal_minix::{AtFlags, OFlag, open, openat};
+
+#[cfg(not(target_os = "minix"))]
 use nix::libc;
-use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
-use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+#[cfg(not(target_os = "minix"))]
+use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmod, fchmodat, fstat, fstatat, mkdirat};
+#[cfg(target_os = "minix")]
+use crate::features::safe_traversal_minix::{
+    FchmodatFlags, FileStat, Mode, fchmod, fchmodat, fstat, fstatat, mkdirat,
+};
+
+#[cfg(not(target_os = "minix"))]
+use nix::unistd::{Gid, Uid, UnlinkatFlags, dup, fchown, fchownat, unlinkat};
+#[cfg(target_os = "minix")]
+use crate::features::safe_traversal_minix::{
+    Gid, Uid, UnlinkatFlags, dup, fchown, fchownat, unlinkat,
+};
 use os_display::Quotable;
 
 use crate::translate;
@@ -111,12 +133,30 @@ impl From<SafeTraversalError> for io::Error {
     }
 }
 
+/// Whether a libc answered "I cannot honour `AT_SYMLINK_NOFOLLOW`" rather than
+/// following the link or failing for another reason.
+///
+/// `nix` answers with its own `Errno`, the minix arm with the port's raw value;
+/// both are what the `fchmodat` arm below compares, so the comparison lives
+/// here instead of naming either type at the call site.
+#[cfg(not(target_os = "minix"))]
+fn unhonoured_nofollow(e: nix::errno::Errno) -> bool {
+    e == nix::errno::Errno::ENOSYS
+        || e == nix::errno::Errno::EOPNOTSUPP
+        || e == nix::errno::Errno::ENOTSUP
+}
+
+#[cfg(target_os = "minix")]
+fn unhonoured_nofollow(e: libc::c_int) -> bool {
+    e == libc::ENOSYS || e == libc::EOPNOTSUPP || e == libc::ENOTSUP
+}
+
 // Helper function to read directory entries using nix
 fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
     // Duplicate the fd for Dir (it takes ownership)
-    let dup_fd = nix::unistd::dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+    let dup_fd = dup(fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
     let mut dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
     for entry_result in dir.iter() {
         let entry = entry_result.map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -157,7 +197,7 @@ impl DirFd {
         if !symlink_behavior.should_follow() {
             flags |= OFlag::O_NOFOLLOW;
         }
-        let fd = nix::fcntl::open(path, flags, Mode::empty()).map_err(|e| {
+        let fd = open(path, flags, Mode::empty()).map_err(|e| {
             SafeTraversalError::OpenFailed {
                 path: path.into(),
                 source: io::Error::from_raw_os_error(e as i32),
@@ -193,9 +233,9 @@ impl DirFd {
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
         let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
+            AtFlags::empty()
         } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+            AtFlags::AT_SYMLINK_NOFOLLOW
         };
 
         let stat = fstatat(&self.fd, name_cstr.as_c_str(), flags).map_err(|e| {
@@ -225,7 +265,7 @@ impl DirFd {
 
     /// Get raw stat data for this directory
     pub fn fstat(&self) -> io::Result<FileStat> {
-        let stat = nix::sys::stat::fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
+        let stat = fstat(&self.fd).map_err(|e| SafeTraversalError::StatFailed {
             path: translate!("safe-traversal-current-directory").into(),
             source: io::Error::from_raw_os_error(e as i32),
         })?;
@@ -276,9 +316,9 @@ impl DirFd {
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
         let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
+            AtFlags::empty()
         } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+            AtFlags::AT_SYMLINK_NOFOLLOW
         };
 
         let uid = uid.map(Uid::from_raw);
@@ -334,19 +374,14 @@ impl DirFd {
             flags,
         ) {
             Ok(()) => return Ok(()),
-            Err(e)
-                if !symlink_behavior.should_follow()
-                    && (e == nix::errno::Errno::ENOSYS
-                        || e == nix::errno::Errno::EOPNOTSUPP
-                        || e == nix::errno::Errno::ENOTSUP) =>
-            {
+            Err(e) if !symlink_behavior.should_follow() && unhonoured_nofollow(e) => {
                 io::Error::from_raw_os_error(e as i32)
             }
             Err(e) => return Err(io::Error::from_raw_os_error(e as i32)),
         };
 
         // --- fchmodat2 fallback (Linux 6.6+, asm-generic arches only) ---
-        // Uses the raw mode value directly; no nix::Mode conversion needed.
+        // Uses the raw mode value directly; no Mode conversion needed.
         // Only enabled on asm-generic architectures where syscall number 452 is
         // correct (x86_64, x86, arm, aarch64, riscv). MIPS/SPARC/PowerPC/Alpha
         // use different numbering and are not supported until libc exposes
@@ -442,7 +477,7 @@ impl DirFd {
     pub fn fchmod(&self, mode: u32) -> io::Result<()> {
         let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
-        nix::sys::stat::fchmod(&self.fd, mode)
+        fchmod(&self.fd, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         Ok(())
@@ -873,6 +908,13 @@ impl MetadataExt for Metadata {
     }
 
     fn atime_nsec(&self) -> i64 {
+        // The port's `stat` carries whole seconds only
+        // (`tools/c-include/sys/stat.h`), so there is no sub-second part.
+        #[cfg(target_os = "minix")]
+        {
+            0
+        }
+
         #[cfg(target_os = "netbsd")]
         {
             #[cfg(not(target_pointer_width = "64"))]
@@ -885,7 +927,7 @@ impl MetadataExt for Metadata {
             }
         }
 
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(not(any(target_os = "netbsd", target_os = "minix")))]
         {
             #[cfg(not(target_pointer_width = "64"))]
             {
@@ -910,6 +952,13 @@ impl MetadataExt for Metadata {
     }
 
     fn mtime_nsec(&self) -> i64 {
+        // The port's `stat` carries whole seconds only
+        // (`tools/c-include/sys/stat.h`), so there is no sub-second part.
+        #[cfg(target_os = "minix")]
+        {
+            0
+        }
+
         #[cfg(target_os = "netbsd")]
         {
             #[cfg(not(target_pointer_width = "64"))]
@@ -921,7 +970,7 @@ impl MetadataExt for Metadata {
                 self.stat.st_mtimensec
             }
         }
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(not(any(target_os = "netbsd", target_os = "minix")))]
         {
             #[cfg(not(target_pointer_width = "64"))]
             {
@@ -946,6 +995,13 @@ impl MetadataExt for Metadata {
     }
 
     fn ctime_nsec(&self) -> i64 {
+        // The port's `stat` carries whole seconds only
+        // (`tools/c-include/sys/stat.h`), so there is no sub-second part.
+        #[cfg(target_os = "minix")]
+        {
+            0
+        }
+
         #[cfg(target_os = "netbsd")]
         {
             #[cfg(not(target_pointer_width = "64"))]
@@ -957,7 +1013,7 @@ impl MetadataExt for Metadata {
                 self.stat.st_ctimensec
             }
         }
-        #[cfg(not(target_os = "netbsd"))]
+        #[cfg(not(any(target_os = "netbsd", target_os = "minix")))]
         {
             #[cfg(not(target_pointer_width = "64"))]
             {
@@ -1194,7 +1250,7 @@ mod tests {
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         // Duplicate the fd first so we don't have ownership conflicts
-        let dup_fd = nix::unistd::dup(&dir_fd).unwrap();
+        let dup_fd = dup(&dir_fd).unwrap();
         let from_raw_fd = DirFd::from_raw_fd(dup_fd.into_raw_fd()).unwrap();
 
         // Both should refer to the same directory

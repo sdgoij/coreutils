@@ -319,6 +319,8 @@ feat_minix = [
   "test",
   "env",
   "touch",
+  "chmod",
+  "rm",
   # text tools
   "comm",
   "cut",
@@ -374,16 +376,17 @@ feat_minix = [
   "sort",
   "unlink",
   #
-  # Still excluded, reasons re-verified in an x86 guest on 2026-09-21 with a
-  # multicall built by the current stage1 (see _finish-bootstrap for the stale
-  # rlib cache that made the earlier notes misleading):
-  #   chmod  - needs uucore's `entries` (group names, which the port's C library
-  #            does not serve) and `perms`, whose `safe_traversal` is nix-based;
-  #            the nix module needs a minix arm over the port's `openat` family
-  #            before either can build (the OS ships its own chmod).
-  #   rm     - pulls the same `safe_traversal` (its `indicatif` -> `console`
-  #            dependency is settled: the libc crate now declares termios and
-  #            winsize), so it is blocked on the same minix arm.
+  # chmod and rm left the excluded set on 2026-11-17 (`KNOWN_ISSUES.md` item
+  # 52): uucore's `safe_traversal` has a minix arm over the port's C library
+  # (`features/safe_traversal_minix.rs`), and the defects that blocked them were
+  # VFS sending a null name to UNLINK/RMDIR, MFS then reading a stale `cch[]`
+  # for it, and `fchmodat` rejecting `AT_SYMLINK_NOFOLLOW`.
+  #
+  # `feat_require_unix_core` (chgrp, chown, chroot, groups, id, install,
+  # logname, mkfifo, mknod, stat, stty) is still outside this set. chgrp and
+  # chown are nearest: they need `fchownat` with `AT_SYMLINK_NOFOLLOW`, which
+  # the port answers ENOSYS for, and `entries`' group half, which the port now
+  # serves through `/etc/group` and `grp.h`.
   #
   # env and touch left this list on 2026-11-17, with
   # `just test-coreutils-minix-<arch>` as the gate: env's exec is the port's
@@ -391,7 +394,6 @@ feat_minix = [
   # `signal`/`sigprocmask` (there is no nix on minix), and touch's filetime path
   # is `libc::utimes`/`lutimes` plus `std::os::unix::fs::MetadataExt`'s times,
   # with rustix's `utimensat`/`futimens` now backed by VFS's `UTIMENS`.
-  #
   # pwd and mktemp left this list with the `getcwd`, `DirEntryExt` and
   # `create_new` work, and ran in an x86 guest. env's exec hang and sync's #GP
   # were symptoms of the mixed-generation multicall, not of those tools: sync

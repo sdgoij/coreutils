@@ -21,8 +21,9 @@ fluent = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "wide"] }
 
-# rustix and libc have no minix backend; test's minix paths use std only.
-[target.'cfg(all(not(any(windows, target_os = "wasi")), not(target_os = "minix")))'.dependencies]
+# rustix is the forks' one, which has a minix backend; `test` needs its
+# `geteuid`/`getegid` for the permission conditions.
+[target.'cfg(all(not(any(windows, target_os = "wasi"))))'.dependencies]
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(all(not(windows), not(target_os = "minix")))'.dependencies]
