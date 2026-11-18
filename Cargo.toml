@@ -320,6 +320,8 @@ feat_minix = [
   "env",
   "touch",
   "chmod",
+  "chgrp",
+  "chown",
   "rm",
   # text tools
   "comm",

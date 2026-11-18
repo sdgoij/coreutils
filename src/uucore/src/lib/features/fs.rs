@@ -195,12 +195,15 @@ impl PartialEq for FileInformation {
     }
 }
 
-// Minix: std exposes neither st_dev nor st_ino; compare size + mtime as a
-// best-effort same-file check until a raw fstat is available.
+// Minix: `std::os::minix::fs::MetadataExt` carries `dev`/`ino`, so the same
+// identity comparison the unix arm uses works here. It previously used
+// `len` + `mtime` as a stopgap, which made two empty directories created in the
+// same second compare equal and turned a real descent into a false cycle.
 #[cfg(target_os = "minix")]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
-        self.0.len() == other.0.len() && self.0.modified().ok() == other.0.modified().ok()
+        use std::os::minix::fs::MetadataExt;
+        self.0.dev() == other.0.dev() && self.0.ino() == other.0.ino()
     }
 }
 
@@ -220,7 +223,9 @@ impl Hash for FileInformation {
         }
         #[cfg(target_os = "minix")]
         {
-            self.0.len().hash(state);
+            use std::os::minix::fs::MetadataExt;
+            self.0.dev().hash(state);
+            self.0.ino().hash(state);
         }
     }
 }
