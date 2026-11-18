@@ -322,6 +322,7 @@ feat_minix = [
   "chmod",
   "chgrp",
   "chown",
+  "groups",
   "rm",
   # text tools
   "comm",
@@ -382,13 +383,14 @@ feat_minix = [
   # 52): uucore's `safe_traversal` has a minix arm over the port's C library
   # (`features/safe_traversal_minix.rs`), and the defects that blocked them were
   # VFS sending a null name to UNLINK/RMDIR, MFS then reading a stale `cch[]`
-  # for it, and `fchmodat` rejecting `AT_SYMLINK_NOFOLLOW`.
+  # for it, and `fchmodat` rejecting `AT_SYMLINK_NOFOLLOW`. chgrp and chown
+  # followed with `lchown`/`fchown` and `do_chown` honouring the same flag
+  # (item 53), and groups followed `getgrouplist` (item 54).
   #
-  # `feat_require_unix_core` (chgrp, chown, chroot, groups, id, install,
-  # logname, mkfifo, mknod, stat, stty) is still outside this set. chgrp and
-  # chown are nearest: they need `fchownat` with `AT_SYMLINK_NOFOLLOW`, which
-  # the port answers ENOSYS for, and `entries`' group half, which the port now
-  # serves through `/etc/group` and `grp.h`.
+  # `feat_require_unix_core` (chroot, id, install, logname, mkfifo, mknod, stat,
+  # stty) is still outside this set. `stat` is nearest but pulls uucore's
+  # `fsext`, whose `statfs`/`strerror` half the port does not serve; `id` needs
+  # `getlogin` and its `pline`/`auditid` arms.
   #
   # env and touch left this list on 2026-11-17, with
   # `just test-coreutils-minix-<arch>` as the gate: env's exec is the port's

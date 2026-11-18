@@ -43,9 +43,13 @@ pub enum TimeoutRet {
     TimedOut,
 }
 
-#[cfg(unix)]
+// Minix is `unix`, but this module is built on `nix` (no minix arm) and POSIX
+// timers, and nothing in `feat_minix` uses `ChildExt` (only `timeout` does).
+// The port's own signal arm over its C library lives in the applets that need
+// one, as `env`'s does.
+#[cfg(all(unix, not(target_os = "minix")))]
 mod unix;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub use unix::*;
 
 #[cfg(windows)]
