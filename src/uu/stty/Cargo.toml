@@ -21,12 +21,14 @@ uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
 
 # `nix` has no minix support and no fork; on minix the termios surface is this
-# crate's own `minixterm` module over the port's C library (`libc` is the fork).
+# crate's own `minixterm` module, which sits on the port's `rustix::termios`
+# backend (the scalar constants still come from `libc`, the fork).
 [target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
 nix = { workspace = true, features = ["ioctl", "term"] }
 
 [target.'cfg(target_os = "minix")'.dependencies]
 libc = { workspace = true }
+rustix = { workspace = true, features = ["termios"] }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

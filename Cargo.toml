@@ -869,12 +869,9 @@ debug = true
 # The fork's own `src/minix` tree is what compiles, and what rustix and std name.
 # `errno` picks its backend with cfg_attr over unix/windows/wasi/hermit, so it
 # has the same problem; `crates/errno` is the port's implementation for it.
-# `terminal_size` asks rustix's termios for the window size, which the port's
-# rustix fork does not serve; `crates/terminal_size` asks the tty server.
 # The new releases also reach rustix through `tempfile`, and the published rustix
 # cannot build for a target whose `std::os::unix` surface is the port's.
 [patch.crates-io]
 libc = { path = "../libc" }
 rustix = { path = "../rustix" }
 errno = { path = "../crates/errno" }
-terminal_size = { path = "../crates/terminal_size" }
