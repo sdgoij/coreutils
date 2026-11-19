@@ -374,6 +374,8 @@ feat_minix = [
   "uname",
   "arch",
   "nproc",
+  # job control
+  "nohup",
   # disk usage
   "du",
   # process
@@ -443,6 +445,11 @@ feat_minix = [
   # `crates/minix-libc`. `test -t` stopped being a hardcoded false at the same time:
   # it asks rustix's minix `termios::isatty`, which reads the descriptor's file type
   # (the std PAL's `IsTerminal` is false for every stream, so it cannot be used).
+  #
+  # `nohup` followed the same day, once `/dev/null` became real (`KNOWN_ISSUES.md`
+  # item 70) and the forks' `O_*` values were aligned with the port's ABI (item 72).
+  # It keeps a minix arm for the nohup file's open, because the std PAL drops
+  # `O_CREAT` whenever append is set (item 71); `tee -a` is still blocked by that.
   #
   # `env` and `touch` left this list on 2026-11-17, with
   # `just test-coreutils-minix-<arch>` as the gate: env's exec is the port's

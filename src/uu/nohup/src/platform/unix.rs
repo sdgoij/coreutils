@@ -5,9 +5,15 @@
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
-use std::fs::{File, OpenOptions};
-use std::io::{Error, IsTerminal as _};
-use std::os::unix::{fs::OpenOptionsExt as _, process::CommandExt as _};
+use std::fs::File;
+#[cfg(not(target_os = "minix"))]
+use std::fs::OpenOptions;
+use std::io::Error;
+#[cfg(not(target_os = "minix"))]
+use std::io::IsTerminal as _;
+#[cfg(not(target_os = "minix"))]
+use std::os::unix::fs::OpenOptionsExt as _;
+use std::os::unix::process::CommandExt as _;
 use std::process::Command;
 use thiserror::Error as ThisError;
 use uucore::error::{UError, UResult};
@@ -62,28 +68,49 @@ pub(crate) fn run(command: &mut Command) -> UResult<Option<Error>> {
 ///
 /// This only affects newly-created files; if the file already exists its
 /// permissions are left alone.
+#[cfg(not(target_os = "minix"))]
 pub(crate) fn set_output_file_mode(opt: &mut OpenOptions) {
     opt.mode(0o600);
 }
 
 fn replace_fds() -> UResult<()> {
     use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
-    if std::io::stdin().is_terminal() {
+    if is_terminal(0) {
         let new_stdin = File::open(std::path::Path::new("/dev/null"))
             .map_err(|e| PlatformError::CannotReplace("STDIN", e))?;
         dup2_stdin(&new_stdin).map_err(|e| PlatformError::CannotReplace("STDIN", e.into()))?;
     }
 
-    if std::io::stdout().is_terminal() {
+    if is_terminal(1) {
         let new_stdout = find_stdout()?;
 
         dup2_stdout(&new_stdout).map_err(|e| PlatformError::CannotReplace("STDOUT", e.into()))?;
     }
 
-    if std::io::stderr().is_terminal() {
+    if is_terminal(2) {
         dup2_stderr(stdout()).map_err(|e| PlatformError::CannotReplace("STDERR", e.into()))?;
     }
     Ok(())
+}
+
+/// Whether a standard descriptor is a terminal.
+///
+/// The std PAL answers `IsTerminal` with `false` for every stream on this port (it predates
+/// the libc `isatty`, which the port now has), so asking it would leave all three streams in
+/// place and `nohup.out` would never be created.
+#[cfg(target_os = "minix")]
+fn is_terminal(fd: i32) -> bool {
+    // SAFETY: isatty only inspects the descriptor number it is given.
+    unsafe { libc::isatty(fd) == 1 }
+}
+
+#[cfg(not(target_os = "minix"))]
+fn is_terminal(fd: i32) -> bool {
+    match fd {
+        0 => std::io::stdin().is_terminal(),
+        1 => std::io::stdout().is_terminal(),
+        _ => std::io::stderr().is_terminal(),
+    }
 }
 
 #[cfg(target_vendor = "apple")]
