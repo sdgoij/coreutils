@@ -1069,9 +1069,9 @@ impl<'a> TextOutput<'a> {
 /// A clock that has not reached the half-year mark cannot have a start before
 /// the epoch; `checked_sub` keeps that case (a guest whose RTC is at the epoch)
 /// from panicking, and everything up to `now` is then recent.
-fn recent_time_range(now: SystemTime) -> std::ops::RangeInclusive<SystemTime> {
+fn recent_time_range(now: SystemTime) -> RangeInclusive<SystemTime> {
     let half_year = Duration::new(31_556_952 / 2, 0);
-    let start = match now.duration_since(std::time::UNIX_EPOCH) {
+    let start = match now.duration_since(UNIX_EPOCH) {
         Ok(elapsed) if elapsed >= half_year => now - half_year,
         // A clock at (or before) the epoch has no earlier instant to name.
         _ => SystemTime::UNIX_EPOCH,

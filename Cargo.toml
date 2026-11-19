@@ -370,6 +370,9 @@ feat_minix = [
   "tty",
   "dircolors",
   "csplit",
+  # system information
+  "uname",
+  "arch",
   # disk usage
   "du",
   # process
