@@ -1049,10 +1049,7 @@ impl<'a> TextOutput<'a> {
                 uid_cache: (),
                 #[cfg(not(unix))]
                 gid_cache: (),
-                // Use "recent" format for files modified within the last ~0.5 years (31556952s).
-                // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-                recent_time_range: (SystemTime::now() - Duration::new(31_556_952 / 2, 0))
-                    ..=SystemTime::now(),
+                recent_time_range: recent_time_range(SystemTime::now()),
                 display_buf: Vec::with_capacity(if config.format == Format::Long {
                     128
                 } else {
@@ -1062,6 +1059,24 @@ impl<'a> TextOutput<'a> {
             dired: DiredOutput::default(),
         }
     }
+}
+
+/// The range `ls` formats as "recent": the half year before `now` through `now`.
+///
+/// According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952
+/// seconds on the average.
+///
+/// A clock that has not reached the half-year mark cannot have a start before
+/// the epoch; `checked_sub` keeps that case (a guest whose RTC is at the epoch)
+/// from panicking, and everything up to `now` is then recent.
+fn recent_time_range(now: SystemTime) -> std::ops::RangeInclusive<SystemTime> {
+    let half_year = Duration::new(31_556_952 / 2, 0);
+    let start = match now.duration_since(std::time::UNIX_EPOCH) {
+        Ok(elapsed) if elapsed >= half_year => now - half_year,
+        // A clock at (or before) the epoch has no earlier instant to name.
+        _ => SystemTime::UNIX_EPOCH,
+    };
+    start..=now
 }
 
 impl LsOutput for TextOutput<'_> {
@@ -1686,4 +1701,28 @@ fn get_security_context<'a>(
     }
 
     Cow::Borrowed(SUBSTITUTE_STRING)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::UNIX_EPOCH;
+
+    #[test]
+    fn a_clock_before_half_a_year_is_not_an_overflow() {
+        let now = UNIX_EPOCH + Duration::from_secs(60);
+        let range = recent_time_range(now);
+        assert_eq!(*range.start(), UNIX_EPOCH);
+        assert_eq!(*range.end(), now);
+    }
+
+    #[test]
+    fn a_modern_clock_has_a_half_year_window() {
+        let now = UNIX_EPOCH + Duration::from_secs(2_000_000_000);
+        let range = recent_time_range(now);
+        assert_eq!(
+            *range.start(),
+            UNIX_EPOCH + Duration::from_secs(2_000_000_000 - 31_556_952 / 2)
+        );
+    }
 }

@@ -1016,7 +1016,16 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
         fs::remove_file(to)?;
     }
     // rustix::fs::mkfifoat is linux only
+    #[cfg(not(target_os = "minix"))]
     nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+    #[cfg(target_os = "minix")]
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        to,
+        rustix::fs::FileType::Fifo,
+        rustix::fs::Mode::from_bits_truncate(0o666),
+        0,
+    )?;
     fs::remove_file(from)
 }
 
@@ -1376,7 +1385,17 @@ fn copy_file_with_hardlinks_helper(
         rename_symlink_fallback(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
         // rustix::fs::mkfifoat is linux only
+        #[cfg(not(target_os = "minix"))]
         nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+        // The port has no `nix`; its `mknodat` is the same VFS call `mkfifo` uses.
+        #[cfg(target_os = "minix")]
+        rustix::fs::mknodat(
+            rustix::fs::CWD,
+            to,
+            rustix::fs::FileType::Fifo,
+            rustix::fs::Mode::from_bits_truncate(0o666),
+            0,
+        )?;
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
     } else {

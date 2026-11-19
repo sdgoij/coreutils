@@ -399,7 +399,12 @@ pub fn canonicalize<P: AsRef<Path>>(
         original.to_path_buf()
     } else {
         let current_dir = env::current_dir()?;
-        dunce::canonicalize(current_dir)?.join(original)
+        // The port's std has no `canonicalize`. `current_dir` is already
+        // absolute, and the walk below resolves every symlink in it, so the
+        // pre-canonicalize is only needed where it exists.
+        #[cfg(not(target_os = "minix"))]
+        let current_dir = dunce::canonicalize(current_dir)?;
+        current_dir.join(original)
     };
     let path = if res_mode == ResolveMode::Logical {
         normalize_path(&original)

@@ -31,7 +31,10 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_pars
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
+#[cfg(not(target_os = "minix"))]
 use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
+#[cfg(target_os = "minix")]
+use rustix::fs::{CWD, Dev, FileType, Mode, mknodat};
 use thiserror::Error;
 
 use platform::copy_on_write;
@@ -3085,8 +3088,19 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
         fs::remove_file(dest)?;
     }
     // rustix::fs::mkfifoat is linux only
-    nix::unistd::mkfifo(dest, Mode::from_bits_truncate(0o666))
-        .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into())
+    #[cfg(not(target_os = "minix"))]
+    return nix::unistd::mkfifo(dest, Mode::from_bits_truncate(0o666))
+        .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into());
+    // The port has no `nix`; its `mknodat` is the same VFS call `mkfifo` uses.
+    #[cfg(target_os = "minix")]
+    return mknodat(
+        CWD,
+        dest,
+        FileType::Fifo,
+        Mode::from_bits_truncate(0o666),
+        0,
+    )
+    .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into());
 }
 
 #[cfg(unix)]
@@ -3111,14 +3125,34 @@ fn copy_node(
         overwrite.verify(dest, debug)?;
         fs::remove_file(dest)?;
     }
-    let sflag = if source_metadata.file_type().is_char_device() {
-        SFlag::S_IFCHR
-    } else {
-        SFlag::S_IFBLK
-    };
-    let mode = Mode::from_bits_truncate(source_metadata.mode() as mode_t);
-    nix_mknod(dest, sflag, mode, source_metadata.rdev() as dev_t)
-        .map_err(|e| translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => e.desc()).into())
+    #[cfg(not(target_os = "minix"))]
+    {
+        let sflag = if source_metadata.file_type().is_char_device() {
+            SFlag::S_IFCHR
+        } else {
+            SFlag::S_IFBLK
+        };
+        let mode = Mode::from_bits_truncate(source_metadata.mode() as mode_t);
+        nix_mknod(dest, sflag, mode, source_metadata.rdev() as dev_t)
+            .map_err(|e| translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => e.desc()).into())
+    }
+
+    #[cfg(target_os = "minix")]
+    {
+        let file_type = if source_metadata.file_type().is_char_device() {
+            FileType::CharacterDevice
+        } else {
+            FileType::BlockDevice
+        };
+        mknodat(
+            CWD,
+            dest,
+            file_type,
+            Mode::from_bits_truncate(source_metadata.mode()),
+            source_metadata.rdev() as Dev,
+        )
+        .map_err(|e| translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => e.to_string()).into())
+    }
 }
 
 fn copy_link(

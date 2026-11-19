@@ -18,15 +18,14 @@ pub fn build_lcase_table() -> ConversionTable {
     // Initialize locale from environment if not already done
     // SAFETY: setlocale is called with a valid C string and is used to initialize
     // the locale for character conversion functions
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     unsafe {
         libc::setlocale(libc::LC_CTYPE, c"".as_ptr())
     };
 
     let mut table = [0u8; 256];
     for (i, item) in table.iter_mut().enumerate() {
-        // SAFETY: tolower is called with a valid byte value and returns a valid byte
-        *item = unsafe { libc::tolower(i as core::ffi::c_int) } as u8;
+        *item = to_lower(i as u8);
     }
     table
 }
@@ -38,17 +37,40 @@ pub fn build_ucase_table() -> ConversionTable {
     // Initialize locale from environment if not already done
     // SAFETY: setlocale is called with a valid C string and is used to initialize
     // the locale for character conversion functions
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(any(target_os = "wasi", target_os = "minix")))]
     unsafe {
         libc::setlocale(libc::LC_CTYPE, c"".as_ptr())
     };
 
     let mut table = [0u8; 256];
     for (i, item) in table.iter_mut().enumerate() {
-        // SAFETY: toupper is called with a valid byte value and returns a valid byte
-        *item = unsafe { libc::toupper(i as core::ffi::c_int) } as u8;
+        *item = to_upper(i as u8);
     }
     table
+}
+
+/// The port's libc has no `ctype.h` declarations, and its C locale maps ASCII
+/// only, which is what `to_ascii_lowercase` does.
+#[cfg(target_os = "minix")]
+fn to_lower(byte: u8) -> u8 {
+    byte.to_ascii_lowercase()
+}
+
+#[cfg(not(target_os = "minix"))]
+fn to_lower(byte: u8) -> u8 {
+    // SAFETY: `tolower` is called with a valid byte value and returns a byte.
+    unsafe { libc::tolower(i32::from(byte)) as u8 }
+}
+
+#[cfg(target_os = "minix")]
+fn to_upper(byte: u8) -> u8 {
+    byte.to_ascii_uppercase()
+}
+
+#[cfg(not(target_os = "minix"))]
+fn to_upper(byte: u8) -> u8 {
+    // SAFETY: `toupper` is called with a valid byte value and returns a byte.
+    unsafe { libc::toupper(i32::from(byte)) as u8 }
 }
 
 /// Gets the uppercase to lowercase conversion table using current locale

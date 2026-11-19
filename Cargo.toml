@@ -353,6 +353,27 @@ feat_minix = [
   # filesystem
   "pwd",
   "mktemp",
+  # directory listing
+  "ls",
+  "dir",
+  "vdir",
+  # copy and move
+  "cp",
+  "mv",
+  # small unix tools
+  "expr",
+  "link",
+  "hostid",
+  "nice",
+  "date",
+  "dd",
+  "tty",
+  "dircolors",
+  "csplit",
+  # disk usage
+  "du",
+  # process
+  "kill",
   # environment
   "printenv",
   "factor",
@@ -534,7 +555,7 @@ regex = "1.10.4"
 rstest = "0.27.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
-rustix = { version = "1.1.4", default-features = false, features = ["minix"] }
+rustix = { version = "1.1.4", default-features = false, features = ["minix", "alloc"] }
 self_cell = "1.0.4"
 selinux = "0.6"
 tempfile = "3.15.0"
