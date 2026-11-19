@@ -373,6 +373,7 @@ feat_minix = [
   # system information
   "uname",
   "arch",
+  "nproc",
   # disk usage
   "du",
   # process
@@ -431,11 +432,19 @@ feat_minix = [
   # mkfifo already used. `stat` needed a minix arm in uucore's `fsext`: MINIX has
   # `statvfs` and no `statfs`, so `-f` reads it through `rustix::fs::statvfs` and
   # the type name is one `FsMeta` answer. `stty` needed a termios surface `nix`
-  # does not have, so `src/uu/stty/src/minixterm.rs` re-exposes the port's tty
+  # `nix` does not have, so `src/uu/stty/src/minixterm.rs` re-exposes the port's tty
   # server attributes in `nix`'s shape and `stty` reaches it through
   # `use crate::minixterm as nix;`.
   #
-  # env and touch left this list on 2026-11-17, with
+  # `nproc` followed on 2026-11-19. Its default path is std's
+  # `available_parallelism`, which the minix PAL already answers with 1, and `--all`
+  # needed two names `sysconf` did not have: `_SC_NPROCESSORS_CONF` and
+  # `_SC_NPROCESSORS_ONLN`, both declared in the libc fork and answered with 1 by
+  # `crates/minix-libc`. `test -t` stopped being a hardcoded false at the same time:
+  # it asks rustix's minix `termios::isatty`, which reads the descriptor's file type
+  # (the std PAL's `IsTerminal` is false for every stream, so it cannot be used).
+  #
+  # `env` and `touch` left this list on 2026-11-17, with
   # `just test-coreutils-minix-<arch>` as the gate: env's exec is the port's
   # `execve` with a PATH search and its signal actions are the port's
   # `signal`/`sigprocmask` (there is no nix on minix), and touch's filetime path

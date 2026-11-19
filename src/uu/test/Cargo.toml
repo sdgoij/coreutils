@@ -22,9 +22,10 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "wide"] }
 
 # rustix is the forks' one, which has a minix backend; `test` needs its
-# `geteuid`/`getegid` for the permission conditions.
+# `geteuid`/`getegid` for the permission conditions, and its `termios::isatty`
+# for `-t` (the std PAL answers `IsTerminal` with false).
 [target.'cfg(all(not(any(windows, target_os = "wasi"))))'.dependencies]
-rustix = { workspace = true, features = ["process"] }
+rustix = { workspace = true, features = ["process", "termios"] }
 
 [target.'cfg(all(not(windows), not(target_os = "minix")))'.dependencies]
 libc = { workspace = true }

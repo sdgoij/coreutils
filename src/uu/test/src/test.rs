@@ -343,10 +343,14 @@ fn fd_is_terminal(fd: i32) -> bool {
     unsafe { libc::isatty(fd) == 1 }
 }
 
-// minix std has no isatty, and the kernel exposes no tty check yet.
+// The std PAL's `IsTerminal` is hardcoded to false (it predates a real tty check),
+// and `libc` is not a minix dependency of this crate, so minix asks rustix, whose
+// minix backend answers from the descriptor's file type.
 #[cfg(target_os = "minix")]
-fn fd_is_terminal(_fd: i32) -> bool {
-    false
+fn fd_is_terminal(fd: i32) -> bool {
+    // SAFETY: isatty only inspects the descriptor number it is given.
+    let borrowed = unsafe { rustix::fd::BorrowedFd::borrow_raw(fd) };
+    rustix::termios::isatty(borrowed)
 }
 
 #[derive(Eq, PartialEq)]
