@@ -374,6 +374,7 @@ feat_minix = [
   "uname",
   "arch",
   "nproc",
+  "hostname",
   # job control
   "nohup",
   # disk usage
