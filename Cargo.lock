@@ -3782,7 +3782,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "rustix",
  "uucore",
 ]
 
@@ -4210,6 +4210,7 @@ dependencies = [
  "cfg_aliases",
  "clap",
  "fluent",
+ "libc",
  "nix",
  "uucore",
 ]

@@ -328,6 +328,9 @@ feat_minix = [
   "whoami",
   "install",
   "mkfifo",
+  "mknod",
+  "stat",
+  "stty",
   "chroot",
   "rm",
   # text tools
@@ -399,9 +402,14 @@ feat_minix = [
   # (item 58), and chroot needed rustix's minix arm wired to VFS_CHROOT
   # (item 59).
   #
-  # `feat_require_unix_core` (mknod, stat, stty) is still outside this
-  # set. `stat` pulls uucore's `fsext`, whose `statfs`/`strerror` half the port
-  # does not serve; `mknod` uses `nix`, which has no minix arm.
+  # The last three of `feat_require_unix_core` followed on 2026-11-19. `mknod`
+  # moved from `nix` to `rustix` (`mknodat`, `Mode`, `umask`), the same arms
+  # mkfifo already used. `stat` needed a minix arm in uucore's `fsext`: MINIX has
+  # `statvfs` and no `statfs`, so `-f` reads it through `rustix::fs::statvfs` and
+  # the type name is one `FsMeta` answer. `stty` needed a termios surface `nix`
+  # does not have, so `src/uu/stty/src/minixterm.rs` re-exposes the port's tty
+  # server attributes in `nix`'s shape and `stty` reaches it through
+  # `use crate::minixterm as nix;`.
   #
   # env and touch left this list on 2026-11-17, with
   # `just test-coreutils-minix-<arch>` as the gate: env's exec is the port's

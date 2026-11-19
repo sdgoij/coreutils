@@ -17,9 +17,16 @@ doctest = false
 
 [target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
-nix = { workspace = true, features = ["ioctl", "term"] }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
+
+# `nix` has no minix support and no fork; on minix the termios surface is this
+# crate's own `minixterm` module over the port's C library (`libc` is the fork).
+[target.'cfg(all(unix, not(target_os = "minix")))'.dependencies]
+nix = { workspace = true, features = ["ioctl", "term"] }
+
+[target.'cfg(target_os = "minix")'.dependencies]
+libc = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }

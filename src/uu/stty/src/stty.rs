@@ -16,6 +16,14 @@
 
 #![cfg(unix)]
 
+// `nix` has no minix support, so on minix the termios surface comes from this crate's
+// own module over the port's C library (`minixterm`). Both files reach it through
+// `nix`, which is what keeps every other line of stty the upstream one.
+#[cfg(target_os = "minix")]
+mod minixterm;
+#[cfg(target_os = "minix")]
+use crate::minixterm as nix;
+
 mod flags;
 
 use crate::flags::AllFlags;

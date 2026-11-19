@@ -6,8 +6,8 @@
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, umask as nix_umask};
+use rustix::fs::{CWD, FileType as NodeKind, Mode, mknodat};
+use rustix::process::umask;
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 
@@ -18,7 +18,12 @@ use uucore::fs::makedev;
 use uucore::translate;
 
 #[allow(clippy::unnecessary_cast)]
-const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+const MODE_RW_UGO: u32 = (Mode::RUSR.bits()
+    | Mode::WUSR.bits()
+    | Mode::RGRP.bits()
+    | Mode::WGRP.bits()
+    | Mode::ROTH.bits()
+    | Mode::WOTH.bits()) as u32;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -30,18 +35,18 @@ mod options {
 }
 
 #[derive(Clone, PartialEq)]
-enum FileType {
+enum NodeType {
     Block,
     Character,
     Fifo,
 }
 
-impl FileType {
-    fn as_sflag(&self) -> SFlag {
+impl NodeType {
+    fn as_file_type(&self) -> NodeKind {
         match self {
-            Self::Block => SFlag::S_IFBLK,
-            Self::Character => SFlag::S_IFCHR,
-            Self::Fifo => SFlag::S_IFIFO,
+            Self::Block => NodeKind::BlockDevice,
+            Self::Character => NodeKind::CharacterDevice,
+            Self::Fifo => NodeKind::Fifo,
         }
     }
 }
@@ -51,12 +56,12 @@ struct Config {
     /// Permission bits for the inode
     mode: Mode,
 
-    file_type: FileType,
+    file_type: NodeType,
 
     /// when false, the exact mode bits will be set
     use_umask: bool,
 
-    dev: dev_t,
+    dev: rustix::fs::Dev,
 
     /// Set security context (SELinux/SMACK).
     #[cfg(any(
@@ -77,7 +82,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     // Label the node at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     let _selinux_guard = if config.set_security_context {
-        let mode = config.file_type.as_sflag().bits() | config.mode.bits();
+        let mode = config.file_type.as_file_type().as_raw_mode() | config.mode.bits();
         match uucore::selinux::FsCreateContext::new(
             std::path::Path::new(file_name),
             Some(mode),
@@ -97,12 +102,13 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     let have_prev_umask = if config.use_umask {
         None
     } else {
-        Some(nix_umask(Mode::empty()))
+        Some(umask(Mode::empty()))
     };
 
-    let mknod_err = nix_mknod(
+    let mknod_err = mknodat(
+        CWD,
         file_name,
-        config.file_type.as_sflag(),
+        config.file_type.as_file_type(),
         config.mode,
         config.dev,
     )
@@ -111,16 +117,11 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
     // set umask back to original value
     if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
+        umask(prev_umask);
     }
 
     if let Some(err) = mknod_err {
-        let _ = writeln!(
-            io::stderr(),
-            "{}: {}",
-            uucore::execution_phrase(),
-            io::Error::from(err)
-        );
+        let _ = writeln!(io::stderr(), "{}: {}", uucore::execution_phrase(), err);
     }
 
     // Apply SMACK context if requested
@@ -145,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let file_type = matches.get_one::<FileType>("type").unwrap();
+    let file_type = matches.get_one::<NodeType>("type").unwrap();
 
     let mut use_umask = true;
     let mode_permissions = match matches.get_one::<String>("mode") {
@@ -174,7 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             mode
         }
     };
-    let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
+    let mode = Mode::from_bits_truncate(mode_permissions);
 
     let file_name = matches
         .get_one::<String>("name")
@@ -192,19 +193,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ))]
     let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
-    let dev = match (
+    let dev: rustix::fs::Dev = match (
         file_type,
         matches.get_one::<u32>(options::MAJOR),
         matches.get_one::<u32>(options::MINOR),
     ) {
-        (FileType::Fifo, None, None) => 0,
-        (FileType::Fifo, _, _) => {
+        (NodeType::Fifo, None, None) => 0,
+        (NodeType::Fifo, _, _) => {
             return Err(UUsageError::new(
                 1,
                 translate!("mknod-error-fifo-no-major-minor"),
             ));
         }
-        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _),
+        (_, Some(&major), Some(&minor)) => makedev(major as _, minor as _) as rustix::fs::Dev,
         _ => {
             return Err(UUsageError::new(
                 1,
@@ -293,7 +294,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn parse_type(tpe: &str) -> Result<FileType, String> {
+fn parse_type(tpe: &str) -> Result<NodeType, String> {
     // Dispatch on the leading character alone, so a spelled-out type works
     // wherever its initial does: `character` is read like `c` in
     // `mknod /dev/ttyS0 character 4 64`.
@@ -301,9 +302,9 @@ fn parse_type(tpe: &str) -> Result<FileType, String> {
         .next()
         .ok_or_else(|| translate!("mknod-error-missing-device-type"))
         .and_then(|first_char| match first_char {
-            'b' => Ok(FileType::Block),
-            'c' | 'u' => Ok(FileType::Character),
-            'p' => Ok(FileType::Fifo),
+            'b' => Ok(NodeType::Block),
+            'c' | 'u' => Ok(NodeType::Character),
+            'p' => Ok(NodeType::Fifo),
             _ => Err(translate!("mknod-error-invalid-device-type", "type" => tpe.quote())),
         })
 }

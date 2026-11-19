@@ -7,12 +7,16 @@ use cfg_aliases::cfg_aliases;
 
 fn main() {
     cfg_aliases! {
+        // MINIX is in this set because its `struct termios` is NetBSD's, and its speeds are
+        // plain rates rather than flag bits: that is the `u32`-speed path `stty` takes for a
+        // BSD, and the one its `bsd` arms gate.
         bsd: { any(
             target_vendor = "apple",
             target_os = "freebsd",
             target_os = "dragonfly",
             target_os = "netbsd",
-            target_os = "openbsd"
+            target_os = "openbsd",
+            target_os = "minix"
         ) },
     };
 }

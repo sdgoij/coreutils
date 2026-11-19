@@ -21,7 +21,11 @@ doctest = false
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
-nix = { workspace = true, features = ["fs"] }
+
+# `nix` has no minix arm, so the node creation, the mode bits and the umask come from
+# `rustix`, whose fork carries the port's minix backend (the pattern `mkfifo` uses).
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs", "process"] }
 
 [features]
 diagnostics = ["uucore/diagnostics"]

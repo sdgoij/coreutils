@@ -13,6 +13,9 @@
 
 use crate::Flag;
 
+#[cfg(target_os = "minix")]
+use crate::minixterm as nix;
+
 #[cfg(not(bsd))]
 use nix::sys::termios::BaudRate;
 use nix::sys::termios::{

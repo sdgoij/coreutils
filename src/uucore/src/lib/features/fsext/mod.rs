@@ -14,7 +14,7 @@ mod windows;
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
 static MOUNT_OPT_BIND: &str = "bind";
 
 #[cfg(any(
@@ -27,20 +27,22 @@ use crate::os_str_from_bytes;
 
 #[cfg(unix)]
 use std::ffi::OsStr;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use std::os::unix::ffi::OsStrExt;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use core::ffi::CStr;
 #[cfg(unix)]
-use libc::{
-    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t, strerror,
-};
-#[cfg(unix)]
+use libc::{S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t};
+// MINIX answers `statvfs`, not `statfs`, and `strerror` is only reached from the
+// `statfs` error path, so the name is not imported there.
+#[cfg(all(unix, not(target_os = "minix")))]
+use libc::strerror;
+#[cfg(all(unix, not(target_os = "minix")))]
 use std::ffi::CString;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use std::io::Error as IOError;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 use std::mem;
 use std::time::SystemTime;
 #[cfg(unix)]
@@ -71,6 +73,54 @@ pub use libc::statfs as StatFs;
     target_os = "cygwin",
 ))]
 pub use libc::statvfs as StatFs;
+
+/// The filesystem-type id this target reports for `-f %t`.
+///
+/// MINIX's `statvfs` reply carries no type, and every filesystem this port mounts is a
+/// MinixFS family server, so there is one answer rather than a lookup table. The value
+/// is a spelling of "MINX" so `%t` reads as itself rather than as a Linux magic number.
+#[cfg(target_os = "minix")]
+pub const MINIX_FS_TYPE: i64 = 0x4D49_4E58;
+
+/// MINIX's filesystem statistics.
+///
+/// There is no `statfs(2)`: the FS server answers `statvfs` with the `struct statvfs`
+/// layout, whose counts are already 64-bit, so this is that layout in the shape
+/// `FsMeta` and `FsUsage` read rather than another libc bean-count.
+#[cfg(target_os = "minix")]
+#[derive(Debug, Copy, Clone)]
+pub struct StatFs {
+    /// Preferred transfer size.
+    pub f_bsize: u64,
+    /// Fragment size: the unit the block counts are expressed in.
+    pub f_frsize: u64,
+    pub f_blocks: u64,
+    pub f_bfree: u64,
+    pub f_bavail: u64,
+    pub f_files: u64,
+    pub f_ffree: u64,
+    pub f_favail: u64,
+    pub f_fsid: u64,
+    pub f_namemax: u64,
+}
+
+#[cfg(target_os = "minix")]
+impl From<rustix::fs::StatVfs> for StatFs {
+    fn from(v: rustix::fs::StatVfs) -> Self {
+        Self {
+            f_bsize: v.f_bsize,
+            f_frsize: v.f_frsize,
+            f_blocks: v.f_blocks,
+            f_bfree: v.f_bfree,
+            f_bavail: v.f_bavail,
+            f_files: v.f_files,
+            f_ffree: v.f_ffree,
+            f_favail: v.f_favail,
+            f_fsid: v.f_fsid,
+            f_namemax: v.f_namemax,
+        }
+    }
+}
 
 #[cfg(any(
     target_vendor = "apple",
@@ -280,7 +330,10 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "minix", target_os = "redox"))
+))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -303,14 +356,20 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:enable
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "minix", target_os = "redox"))
+))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "minix", target_os = "redox"))
+))]
 fn mount_dev_id(mount_dir: &OsStr) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -403,7 +462,8 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
-        target_os = "wasi"
+        target_os = "wasi",
+        target_os = "minix"
     ))]
     {
         // No method to read mounts on these platforms
@@ -497,7 +557,7 @@ pub trait FsMeta {
     fn namelen(&self) -> u64;
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 impl FsMeta for StatFs {
     /// The block size the `f_blocks`, `f_bfree` and `f_bavail` counts are
     /// expressed in.
@@ -739,7 +799,49 @@ impl FsMeta for StatFs {
     }
 }
 
-#[cfg(unix)]
+/// `statvfs`'s fields are already the counts `FsMeta` reports, so every method is one
+/// field. `f_fsid` is a plain number here (no `fsid_t` to unpack) and there is no
+/// filesystem-type id in the reply: `fs_type` reports the one value `pretty_fstype`
+/// knows for this target.
+#[cfg(target_os = "minix")]
+impl FsMeta for StatFs {
+    fn fs_type(&self) -> i64 {
+        MINIX_FS_TYPE
+    }
+    fn io_size(&self) -> u64 {
+        self.f_bsize
+    }
+    fn block_size(&self) -> i64 {
+        if self.f_frsize == 0 {
+            self.f_bsize as i64
+        } else {
+            self.f_frsize as i64
+        }
+    }
+    fn total_blocks(&self) -> u64 {
+        self.f_blocks
+    }
+    fn free_blocks(&self) -> u64 {
+        self.f_bfree
+    }
+    fn avail_blocks(&self) -> u64 {
+        self.f_bavail
+    }
+    fn total_file_nodes(&self) -> u64 {
+        self.f_files
+    }
+    fn free_file_nodes(&self) -> u64 {
+        self.f_ffree
+    }
+    fn fsid(&self) -> u64 {
+        self.f_fsid
+    }
+    fn namelen(&self) -> u64 {
+        self.f_namemax
+    }
+}
+
+#[cfg(all(unix, not(target_os = "minix")))]
 pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
     #[cfg(unix)]
     let p = path.as_bytes();
@@ -763,6 +865,16 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
         }
         Err(e) => Err(e.to_string()),
     }
+}
+
+// MINIX has `statvfs`, and `rustix`'s minix backend is the call that reaches it: the
+// FS server answers REQ_STATVFS, so a failure comes back as the FS's own errno rather
+// than as a `strerror` string.
+#[cfg(target_os = "minix")]
+pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
+    rustix::fs::statvfs(path)
+        .map(StatFs::from)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(unix)]
@@ -790,6 +902,9 @@ pub fn pretty_filetype(mode: mode_t, size: u64) -> String {
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
     // spell-checker:disable
     match fstype {
+        // Not a kernel ABI value: see `MINIX_FS_TYPE`, which `FsMeta::fs_type` answers.
+        #[cfg(target_os = "minix")]
+        MINIX_FS_TYPE => "minix".into(),
         0x6163_6673 => "acfs".into(),
         0xADF5 => "adfs".into(),
         0xADFF => "affs".into(),
