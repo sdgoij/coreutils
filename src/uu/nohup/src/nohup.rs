@@ -141,25 +141,6 @@ fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
 }
 
 /// Create `path` if it does not exist and open it for appending, mode 0600.
-///
-/// On minix this asks rustix directly. The std PAL drops the creation flags whenever
-/// `append` is set (`rust/library/std/src/sys/pal/minix/fs.rs`, `get_creation_mode`
-/// returns 0 for `(_, true)`), so `.create(true).append(true)` opens a file it cannot
-/// create and answers ENOENT. `KNOWN_ISSUES.md` item 71 records that defect; this is the
-/// same open the PAL makes once it is fixed. `tee -a` and any other appender still fail
-/// until the toolchain is rebuilt.
-#[cfg(target_os = "minix")]
-fn open_output_file(path: &str) -> std::io::Result<File> {
-    let fd = rustix::fs::open(
-        path,
-        rustix::fs::OFlags::WRONLY | rustix::fs::OFlags::CREATE | rustix::fs::OFlags::APPEND,
-        rustix::fs::Mode::from_bits_truncate(0o600),
-    )
-    .map_err(Error::from)?;
-    Ok(File::from(fd))
-}
-
-#[cfg(not(target_os = "minix"))]
 fn open_output_file(path: &str) -> std::io::Result<File> {
     let mut opt = std::fs::OpenOptions::new();
     opt.create(true).append(true);

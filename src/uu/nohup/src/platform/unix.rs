@@ -6,11 +6,12 @@
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
 
 use std::fs::File;
-#[cfg(not(target_os = "minix"))]
 use std::fs::OpenOptions;
 use std::io::Error;
 #[cfg(not(target_os = "minix"))]
 use std::io::IsTerminal as _;
+#[cfg(target_os = "minix")]
+use std::os::minix::fs::OpenOptionsExt as _;
 #[cfg(not(target_os = "minix"))]
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::os::unix::process::CommandExt as _;
@@ -68,7 +69,6 @@ pub(crate) fn run(command: &mut Command) -> UResult<Option<Error>> {
 ///
 /// This only affects newly-created files; if the file already exists its
 /// permissions are left alone.
-#[cfg(not(target_os = "minix"))]
 pub(crate) fn set_output_file_mode(opt: &mut OpenOptions) {
     opt.mode(0o600);
 }
