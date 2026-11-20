@@ -13,11 +13,21 @@
 
 use std::io;
 use std::process::Child;
+use std::time::Duration;
 
 use uucore::process::{
-    Job, configure_process_group, enable_ctrl_forwarding, send_signal_to_console_group,
-    send_signal_to_process, send_signal_to_tree,
+    ChildExt, Job, TimeoutRet, configure_process_group, enable_ctrl_forwarding,
+    send_signal_to_console_group, send_signal_to_process, send_signal_to_tree,
 };
+
+/// The wait-with-timeout, through the `ChildExt` implementation in `uucore::process`.
+pub(crate) fn wait_or_timeout(
+    child: &mut Child,
+    timeout: Duration,
+    ignore_term: bool,
+) -> io::Result<TimeoutRet> {
+    child.wait_or_timeout(timeout, ignore_term)
+}
 
 const SIGNAL_INT: usize = 2;
 const SIGNAL_QUIT: usize = 3;

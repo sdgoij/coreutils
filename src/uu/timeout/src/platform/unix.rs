@@ -11,8 +11,21 @@ use std::os::unix::process::ExitStatusExt;
 use std::process::Child;
 
 use rustix::process::{Pid, Signal, getpid, kill_process, setpgid};
-use uucore::process::{ChildExt, timeout_signal_set, unblock_signal};
+use uucore::process::{ChildExt, TimeoutRet, timeout_signal_set, unblock_signal};
 use uucore::signals::{install_signal_handler, signal_by_name_or_value};
+
+/// The wait-with-timeout, through the `ChildExt` implementation in `uucore::process`.
+///
+/// The three platform modules share this signature so `timeout.rs` never names a
+/// platform type; minix supplies its own because `uucore::process` is built on `nix`,
+/// which has no minix arm.
+pub(crate) fn wait_or_timeout(
+    child: &mut Child,
+    timeout: std::time::Duration,
+    ignore_term: bool,
+) -> io::Result<TimeoutRet> {
+    child.wait_or_timeout(timeout, ignore_term)
+}
 
 /// Install SIGCHLD handler to ensure waiting for child works even if parent ignored SIGCHLD.
 fn install_sigchld() {

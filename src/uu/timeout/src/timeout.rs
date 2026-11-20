@@ -18,7 +18,7 @@ use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
-use uucore::process::{ChildExt, TimeoutRet};
+use uucore::process::TimeoutRet;
 use uucore::translate;
 
 use uucore::{
@@ -222,7 +222,7 @@ fn wait_or_kill_process(
     verbose: bool,
     spawn_state: &platform::SpawnState,
 ) -> std::io::Result<i32> {
-    match process.wait_or_timeout(duration, true) {
+    match platform::wait_or_timeout(process, duration, true) {
         Ok(TimeoutRet::Exited(status)) => {
             if preserve_status {
                 let exit_code = status.code().unwrap_or_else(|| {
@@ -295,7 +295,7 @@ fn timeout(
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration, false) {
+    match platform::wait_or_timeout(process, duration, false) {
         Ok(TimeoutRet::Exited(status)) => {
             let exit_code = status.code().unwrap_or_else(|| {
                 platform::status_signal(status).map_or_else(

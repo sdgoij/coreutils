@@ -10,9 +10,14 @@
 //! state travels through the opaque `SpawnState` returned by `post_spawn`
 //! (a job object on Windows, empty on unix).
 
-#[cfg(unix)]
+#[cfg(target_os = "minix")]
+mod minix;
+#[cfg(target_os = "minix")]
+pub(crate) use minix::*;
+
+#[cfg(all(unix, not(target_os = "minix")))]
 mod unix;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "minix")))]
 pub(crate) use unix::*;
 
 #[cfg(windows)]

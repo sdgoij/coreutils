@@ -381,6 +381,7 @@ feat_minix = [
   "du",
   # process
   "kill",
+  "timeout",
   # environment
   "printenv",
   "factor",
