@@ -370,6 +370,8 @@ feat_minix = [
   "tty",
   "dircolors",
   "csplit",
+  # pager (its terminal surface is the applet's own minix module, `KNOWN_ISSUES.md` 75)
+  "more",
   # system information
   "uname",
   "arch",

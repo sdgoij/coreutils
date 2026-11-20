@@ -13,6 +13,15 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+
+// `crossterm`'s event source is `mio`, which has no minix arm; on minix the
+// terminal surface is this crate's own module, reached through the same name
+// so every other line of the applet is the upstream one (`KNOWN_ISSUES.md` 75).
+#[cfg(target_os = "minix")]
+mod minixterm;
+#[cfg(target_os = "minix")]
+use crate::minixterm as crossterm;
+
 use crossterm::{
     ExecutableCommand,
     QueueableCommand, // spell-checker:disable-line

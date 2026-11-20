@@ -17,9 +17,18 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-crossterm = { workspace = true, features = ["events"] }
 uucore = { workspace = true }
 fluent = { workspace = true }
+
+# `crossterm`'s `events` feature selects `mio`, which has no minix arm, so on
+# minix the terminal surface is this crate's `minixterm` module: ANSI command
+# rendering over the applet's writer, and keys decoded from `rustix::event`'s
+# `poll` and a `read` of descriptor 0 (`KNOWN_ISSUES.md` item 75).
+[target.'cfg(not(target_os = "minix"))'.dependencies]
+crossterm = { workspace = true, features = ["events"] }
+
+[target.'cfg(target_os = "minix")'.dependencies]
+rustix = { workspace = true, features = ["event", "termios"] }
 
 [target.'cfg(windows)'.dependencies]
 crossterm = { workspace = true, features = ["windows"] }
