@@ -149,6 +149,7 @@ pub mod systemd_logind;
         target_os = "cygwin",
         target_os = "freebsd",
         target_os = "linux",
+        target_os = "minix",
         target_os = "netbsd"
     )
 ))]

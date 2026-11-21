@@ -457,13 +457,39 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     {
         windows::read_fs_list()
     }
+    #[cfg(target_os = "minix")]
+    {
+        // The port has no mount table to read: every image mounts the same trees at boot.
+        // Report them so `df` can find a filesystem for a path and show the root's usage;
+        // `statvfs` supplies the numbers. The pseudo-filesystems have zero blocks, which
+        // keeps them out of a plain `df` while `df /proc` and `df -a` can still show them.
+        let mounts = [
+            ("rootfs", "/", "minix"),
+            ("procfs", "/proc", "procfs"),
+            ("devman", "/dev", "devman"),
+            ("devman", "/devices", "devman"),
+        ];
+        let list = mounts
+            .iter()
+            .map(|&(dev, dir, fs_type)| MountInfo {
+                dev_id: String::new(),
+                dev_name: dev.to_string(),
+                fs_type: fs_type.to_string(),
+                mount_root: OsString::new(),
+                mount_dir: OsString::from(dir),
+                mount_option: "rw".to_string(),
+                remote: false,
+                dummy: false,
+            })
+            .collect();
+        Ok(list)
+    }
     #[cfg(any(
         target_os = "aix",
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
-        target_os = "wasi",
-        target_os = "minix"
+        target_os = "wasi"
     ))]
     {
         // No method to read mounts on these platforms

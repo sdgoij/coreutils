@@ -140,7 +140,10 @@ impl Filesystem {
         P: AsRef<Path>,
     {
         let file = path.as_ref().as_os_str().to_owned();
-        let canonicalize = true;
+        // The minix std PAL has no canonicalize. The port's mount points are fixed and
+        // absolute, so the longest-prefix match below resolves a path without one; the
+        // only loss is symlink resolution, which no mount point in the image uses.
+        let canonicalize = !cfg!(target_os = "minix");
 
         let result = mount_info_from_path(mounts, path, canonicalize);
         result

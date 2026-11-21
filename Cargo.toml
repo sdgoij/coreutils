@@ -377,9 +377,17 @@ feat_minix = [
   "arch",
   "nproc",
   "hostname",
+  # who is logged in: `who`, `users` and `pinky` read /var/run/utmpx, which
+  # init writes (`crates/userland/src/lib.rs`) and the shell retires on exit;
+  # `uptime` reads /proc/uptime and /proc/loadavg. See KNOWN_ISSUES item 7.
+  "who",
+  "users",
+  "pinky",
+  "uptime",
   # job control
   "nohup",
   # disk usage
+  "df",
   "du",
   # process
   "kill",
@@ -475,6 +483,20 @@ feat_minix = [
   # item 19, fixed by sending the path in a grant). The `U` bytes `sort` printed
   # and the clap TypeId that is not a hash were the separate defect of item 12,
   # since fixed. Re-verified in an x86 guest.
+  #
+  # `who`, `users`, `pinky` and `uptime` came in on 2026-11-21. The first three
+  # read the session file (`crates/minix-std/src/utmpx.rs`, `/tmp/utmpx`, written
+  # by init and retired by the shell) through uucore's minix `utmpx` arm, which is
+  # the port's own `libc::utmpx` and cursor calls; `uptime` reads `/proc/uptime`
+  # and `/proc/loadavg`, the latter fed by the kernel's `GET_LOADINFO` reply.
+  #
+  # `stdbuf` stays out, and not for a missing arm: nothing on this platform can
+  # honour it. GNU's stdbuf sets `LD_PRELOAD` to a library that calls `setvbuf`
+  # on the C streams, and this loader has no `LD_PRELOAD` (crates/ldso), the port's
+  # C stdio is already unbuffered with a no-op `setvbuf` (crates/minix-libc), and
+  # the uutils applets themselves are Rust programs whose std has no hook to
+  # change its buffering. An applet that reported success while changing nothing
+  # would be worse than its absence.
 ]
 #
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)

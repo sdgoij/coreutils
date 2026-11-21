@@ -61,6 +61,7 @@ use libc::utmpx;
 #[cfg(any(
     target_vendor = "apple",
     target_os = "linux",
+    target_os = "minix",
     target_os = "netbsd",
     target_os = "cygwin"
 ))]
@@ -198,6 +199,30 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
+/// The port's own session file: `crates/minix-std/src/utmpx.rs` writes the
+/// entries, `crates/minix-libc`'s cursor calls hand them back, and the
+/// constants are `i16` here because `record_type()` is (`ut_type` is a
+/// `uint16_t` in the header, as on NetBSD).
+#[cfg(target_os = "minix")]
+mod ut {
+    pub static DEFAULT_FILE: &str = "/tmp/utmpx";
+
+    pub const UT_LINESIZE: usize = libc::UT_LINESIZE;
+    pub const UT_NAMESIZE: usize = libc::UT_NAMESIZE;
+    pub const UT_IDSIZE: usize = libc::UT_IDSIZE;
+    pub const UT_HOSTSIZE: usize = libc::UT_HOSTSIZE;
+
+    pub const BOOT_TIME: i16 = libc::BOOT_TIME as i16;
+    pub const DEAD_PROCESS: i16 = libc::DEAD_PROCESS as i16;
+    pub const EMPTY: i16 = libc::EMPTY as i16;
+    pub const INIT_PROCESS: i16 = libc::INIT_PROCESS as i16;
+    pub const LOGIN_PROCESS: i16 = libc::LOGIN_PROCESS as i16;
+    pub const NEW_TIME: i16 = libc::NEW_TIME as i16;
+    pub const OLD_TIME: i16 = libc::OLD_TIME as i16;
+    pub const RUN_LVL: i16 = libc::RUN_LVL as i16;
+    pub const USER_PROCESS: i16 = libc::USER_PROCESS as i16;
+}
+
 /// A login record
 pub struct Utmpx {
     inner: utmpx,
@@ -213,7 +238,19 @@ impl Utmpx {
     }
 }
 
-#[cfg(not(target_os = "netbsd"))]
+/// `ut_type` is a `uint16_t` in the port's header, so it narrows here the way
+/// NetBSD's does; the user field keeps its POSIX name.
+#[cfg(target_os = "minix")]
+impl Utmpx {
+    fn ut_type(&self) -> i16 {
+        self.inner.ut_type as i16
+    }
+    fn ut_user(&self) -> String {
+        chars2string!(self.inner.ut_user)
+    }
+}
+
+#[cfg(not(any(target_os = "netbsd", target_os = "minix")))]
 impl Utmpx {
     fn ut_type(&self) -> i16 {
         self.inner.ut_type
@@ -287,34 +324,45 @@ impl Utmpx {
     pub fn canon_host(&self) -> IOResult<String> {
         let host = self.host();
 
-        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-
-        if !hostname.is_empty() {
-            use dns_lookup::{AddrInfoHints, getaddrinfo};
-
-            const AI_CANONNAME: i32 = 0x2;
-            let hints = AddrInfoHints {
-                flags: AI_CANONNAME,
-                ..AddrInfoHints::default()
-            };
-            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
-                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
-                for socket in sockets {
-                    if let Some(ai_canonname) = socket.canonname {
-                        return Ok(if display.is_empty() {
-                            ai_canonname
-                        } else {
-                            format!("{ai_canonname}:{display}")
-                        });
-                    }
-                }
-            } else {
-                // GNU coreutils has this behavior
-                return Ok(hostname.to_string());
-            }
+        #[cfg(target_os = "minix")]
+        {
+            // The port's C library has no resolver, so the recorded host is
+            // reported as it was written; a `:display` suffix is already part
+            // of `host`.
+            Ok(host)
         }
 
-        Ok(host)
+        #[cfg(not(target_os = "minix"))]
+        {
+            let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
+
+            if !hostname.is_empty() {
+                use dns_lookup::{AddrInfoHints, getaddrinfo};
+
+                const AI_CANONNAME: i32 = 0x2;
+                let hints = AddrInfoHints {
+                    flags: AI_CANONNAME,
+                    ..AddrInfoHints::default()
+                };
+                if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
+                    let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
+                    for socket in sockets {
+                        if let Some(ai_canonname) = socket.canonname {
+                            return Ok(if display.is_empty() {
+                                ai_canonname
+                            } else {
+                                format!("{ai_canonname}:{display}")
+                            });
+                        }
+                    }
+                } else {
+                    // GNU coreutils has this behavior
+                    return Ok(hostname.to_string());
+                }
+            }
+
+            Ok(host)
+        }
     }
 
     /// Iterate through all the utmp records.
