@@ -205,7 +205,7 @@ mod ut {
 /// `uint16_t` in the header, as on NetBSD).
 #[cfg(target_os = "minix")]
 mod ut {
-    pub static DEFAULT_FILE: &str = "/tmp/utmpx";
+    pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
     pub const UT_LINESIZE: usize = libc::UT_LINESIZE;
     pub const UT_NAMESIZE: usize = libc::UT_NAMESIZE;
